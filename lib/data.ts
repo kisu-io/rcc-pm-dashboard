@@ -63,8 +63,11 @@ export async function getDocuments(projectId?: string): Promise<DocumentRow[]> {
   let q = supabase.from('documents').select('*').order('created_at', { ascending: false });
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
-  if (error || !data) return [];
-  return data as DocumentRow[];
+  if (error) {
+    console.error('[getDocuments] error:', error.message);
+    return [];
+  }
+  return (data as DocumentRow[]) || [];
 }
 
 // ===== HELPERS =====
