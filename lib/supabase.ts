@@ -37,6 +37,8 @@ export type Task = {
   due_date: string | null;
   constraint_note: string | null;
   notes: string | null;
+  depends_on?: string[] | null;
+  lead_time_days?: number | null;
 };
 
 export type Milestone = {
@@ -61,4 +63,22 @@ export type DocumentRow = {
   mimetype?: string | null;
   folder_path?: string | null;
   is_folder?: boolean;
+};
+
+export type Material = {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  name: string;
+  category: string | null;
+  supplier: string | null;
+  quantity: number | null;
+  unit: string | null;
+  lead_time_days: number | null;
+  order_date: string | null;
+  expected_delivery: string | null;
+  actual_delivery: string | null;
+  status: string;
+  notes: string | null;
+  created_at?: string;
 };

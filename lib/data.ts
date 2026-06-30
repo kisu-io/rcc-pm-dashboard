@@ -1,4 +1,4 @@
-import { supabase, Project, Task, Milestone, DocumentRow } from './supabase';
+import { supabase, Project, Task, Milestone, DocumentRow, Material } from './supabase';
 
 const hasKey =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -68,6 +68,18 @@ export async function getDocuments(projectId?: string): Promise<DocumentRow[]> {
     return [];
   }
   return (data as DocumentRow[]) || [];
+}
+
+export async function getMaterials(projectId?: string): Promise<Material[]> {
+  if (!hasKey) return [];
+  let q = supabase.from('materials').select('*').order('created_at', { ascending: false });
+  if (projectId) q = q.eq('project_id', projectId);
+  const { data, error } = await q;
+  if (error) {
+    console.error('[getMaterials] error:', error.message);
+    return [];
+  }
+  return (data as Material[]) || [];
 }
 
 // ===== HELPERS =====

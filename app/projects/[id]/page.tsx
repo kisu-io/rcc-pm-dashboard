@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getProject, getTasks, getMilestones, getDocuments, formatVND, daysFromNow, isOverdue } from '@/lib/data';
 import EditProjectButton from '@/components/EditProjectButton';
 import AddMilestoneButton from '@/components/AddMilestoneButton';
+import ProjectDocuments from '@/components/ProjectDocuments';
 import { ArrowLeft, MapPin, Calendar, Wallet, User, FileText, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -229,30 +230,13 @@ export default async function ProjectDetail({ params }: { params: { id: string }
         </div>
       </div>
 
-      {/* Documents */}
+      {/* Documents — project-scoped drive */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm flex items-center gap-2"><FileText size={14} /> Documents & Photos</h3>
-          <Link href="/documents" className="text-xs text-blue-600 hover:underline">Open drive →</Link>
+          <Link href="/documents" className="text-xs text-blue-600 hover:underline">Open full drive →</Link>
         </div>
-        {documents.length === 0 ? (
-          <p className="text-xs text-slate-400 py-6 text-center">No files uploaded yet.</p>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-            {documents.map((d) => (
-              <a
-                key={d.id}
-                href={`https://eyxqbpcgrunksmirsiia.supabase.co/storage/v1/object/public/${d.bucket}/${d.path}`}
-                target="_blank"
-                rel="noreferrer"
-                className="border border-slate-200 rounded-lg p-2 hover:bg-slate-50 text-xs truncate"
-              >
-                <div className="text-slate-700 truncate font-medium">{d.name}</div>
-                <div className="text-[9px] text-slate-400 mt-0.5">{d.bucket}</div>
-              </a>
-            ))}
-          </div>
-        )}
+        <ProjectDocuments project={project} />
       </div>
     </div>
   );

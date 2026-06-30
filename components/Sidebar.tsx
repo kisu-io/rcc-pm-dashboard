@@ -4,14 +4,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, ListTodo, Calendar,
-  FileText, Wallet, Boxes, Users, HardHat, Menu, X,
+  FileText, Wallet, Boxes, Users, HardHat, Menu, X, CalendarDays,
 } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/tasks', label: 'Tasks (Kanban)', icon: ListTodo },
-  { href: '/calendar', label: 'Calendar', icon: Calendar },
+  { href: '/gantt', label: 'Gantt', icon: Calendar },
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/budget', label: 'Budget & Cost', icon: Wallet },
   { href: '/materials', label: 'Materials', icon: Boxes },
