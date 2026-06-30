@@ -1,16 +1,17 @@
 'use client';
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { UploadCloud, X, Loader2 } from 'lucide-react';
+import { UploadCloud, Loader2 } from 'lucide-react';
 
 const BUCKETS = ['documents', 'site-photos', 'reports'] as const;
 type Bucket = typeof BUCKETS[number];
 
 export default function UploadDropzone({
-  projectId, bucket, onUploaded,
+  projectId, bucket, folderPath = '', onUploaded,
 }: {
   projectId?: string;
   bucket: Bucket;
+  folderPath?: string;
   onUploaded?: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -24,22 +25,26 @@ export default function UploadDropzone({
     let ok = 0;
     const filesArr = Array.from(files);
     for (const file of filesArr) {
-      // Build unique path: <projectId?>/<timestamp>-<filename>
       const ts = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = projectId ? `${projectId}/${ts}-${safeName}` : `${ts}-${safeName}`;
-      const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+      // Storage path includes folder path for organization
+      const storagePath = folderPath ? `${folderPath}/${ts}-${safeName}` : `${ts}-${safeName}`;
+      const { error: upErr } = await supabase.storage.from(bucket).upload(storagePath, file, { upsert: false });
       if (upErr) {
         setError(upErr.message);
         continue;
       }
-      // Insert metadata row (if documents table)
+      // Insert metadata row with folder_path, size, mimetype
       if (projectId) {
         await supabase.from('documents').insert({
           project_id: projectId,
           name: file.name,
           bucket,
-          path,
+          path: storagePath,
+          folder_path: folderPath,
+          size: file.size,
+          mimetype: file.type || null,
+          is_folder: false,
           uploaded_by: 'web',
         });
       }
@@ -48,7 +53,7 @@ export default function UploadDropzone({
     setUploading(false);
     setLastCount(ok);
     onUploaded?.();
-  }, [projectId, bucket, onUploaded]);
+  }, [projectId, bucket, folderPath, onUploaded]);
 
   return (
     <div
@@ -81,7 +86,9 @@ export default function UploadDropzone({
           <p className="text-xs md:text-sm text-slate-600 font-medium">
             Kéo-thả file vào đây hoặc bấm để chọn
           </p>
-          <p className="text-[10px] text-slate-400 mt-1">Bucket: {bucket} · nhiều file OK</p>
+          <p className="text-[10px] text-slate-400 mt-1">
+            {bucket}{folderPath ? ` / ${folderPath}` : ''} · nhiều file OK
+          </p>
           {error && <p className="text-[10px] text-red-600 mt-2 break-words">⚠ {error}</p>}
           {lastCount > 0 && !error && <p className="text-[10px] text-green-600 mt-2">✓ {lastCount} file uploaded</p>}
         </>

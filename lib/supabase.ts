@@ -57,4 +57,8 @@ export type DocumentRow = {
   path: string;
   uploaded_by: string | null;
   created_at: string;
+  size?: number | null;
+  mimetype?: string | null;
+  folder_path?: string | null;
+  is_folder?: boolean;
 };
