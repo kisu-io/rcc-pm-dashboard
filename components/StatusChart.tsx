@@ -16,10 +16,10 @@ export default function StatusChart({ data }: { data: { status: string; count: n
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm">
       <h3 className="font-semibold mb-3 text-sm">Project by Status</h3>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data}>
-          <XAxis dataKey="status" tick={{ fontSize: 10 }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 8 }}>
+          <XAxis dataKey="status" tick={{ fontSize: 9 }} interval={0} angle={-15} textAnchor="end" height={50} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={32} />
           <Tooltip />
           <Bar dataKey="count" radius={[6, 6, 0, 0]}>
             {data.map((d) => (

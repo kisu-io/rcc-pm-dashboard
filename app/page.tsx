@@ -46,27 +46,27 @@ export default async function Dashboard() {
   const constraints = tasks.filter((t) => t.constraint_note);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-slate-500">RCC Construction Project Management</p>
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold truncate">Dashboard</h1>
+          <p className="text-xs md:text-sm text-slate-500 truncate">RCC Construction Project Management</p>
         </div>
       </div>
 
       {/* Constraint / Domain status banner */}
       {constraints.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={20} />
-          <div className="text-sm">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 md:p-4 flex items-start gap-2 md:gap-3">
+          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+          <div className="text-xs md:text-sm min-w-0">
             <span className="font-semibold text-amber-700">{constraints.length} ràng buộc đang chặn tiến độ: </span>
-            {constraints.map((c) => `${c.title} — ${c.constraint_note}`).join(' · ')}
+            <span className="break-words">{constraints.map((c) => `${c.title} — ${c.constraint_note}`).join(' · ')}</span>
           </div>
         </div>
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
         <KpiCard label="Total Projects" value={total} icon={FolderKanban} accent="#2563eb" />
         <KpiCard label="In Progress" value={inProgress} icon={Loader} accent="#06b6d4" />
         <KpiCard label="On Hold" value={onHold} icon={PauseCircle} accent="#f59e0b" />
@@ -75,17 +75,17 @@ export default async function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ProgressChart />
         <StatusChart data={statusData} />
       </div>
 
-      {/* Tables */}
-      <div className="grid md:grid-cols-2 gap-4">
+      {/* Tables — stacked on mobile, side-by-side on md+ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Recent Projects */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
+        <div className="bg-white rounded-xl p-4 shadow-sm overflow-x-auto">
           <h3 className="font-semibold mb-3 text-sm">Recent Projects</h3>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[480px]">
             <thead>
               <tr className="text-left text-slate-400 text-xs">
                 <th className="pb-2">Project</th><th>Location</th><th>Status</th><th>Progress</th>
@@ -116,9 +116,9 @@ export default async function Dashboard() {
         </div>
 
         {/* 6-Week Look-ahead */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
+        <div className="bg-white rounded-xl p-4 shadow-sm overflow-x-auto">
           <h3 className="font-semibold mb-3 text-sm">6-Week Look-ahead</h3>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[480px]">
             <thead>
               <tr className="text-left text-slate-400 text-xs">
                 <th className="pb-2">Task</th><th>Owner</th><th>Priority</th><th>Due</th>

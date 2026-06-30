@@ -17,8 +17,8 @@ export default function ProgressChart() {
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm">
       <h3 className="font-semibold mb-3 text-sm">Project Progress (S-curve)</h3>
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={data}>
+      <ResponsiveContainer width="100%" height={200}>
+        <AreaChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 8 }}>
           <defs>
             <linearGradient id="p" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#2563eb" stopOpacity={0.4} />

@@ -9,8 +9,8 @@ export default async function TasksPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Tasks — Kanban</h1>
-        <p className="text-sm text-slate-500">Kéo-thả task giữa các cột để cập nhật trạng thái</p>
+        <h1 className="text-xl md:text-2xl font-bold">Tasks — Kanban</h1>
+        <p className="text-xs md:text-sm text-slate-500">Kéo-thả task giữa các cột để cập nhật trạng thái</p>
       </div>
       <KanbanBoard initialTasks={tasks} projMap={projMap} />
     </div>
