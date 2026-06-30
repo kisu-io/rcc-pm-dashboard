@@ -44,7 +44,7 @@ export default function TaskFilters({
         </select>
         <span className="text-[10px] text-slate-400 ml-auto">{filtered.length} tasks</span>
       </div>
-      <KanbanBoard initialTasks={filtered} projMap={projMap} />
+      <KanbanBoard initialTasks={filtered} projMap={projMap} projects={projects} />
     </div>
   );
 }

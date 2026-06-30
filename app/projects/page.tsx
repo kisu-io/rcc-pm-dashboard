@@ -1,6 +1,7 @@
 import { getProjects, getTasks } from '@/lib/data';
 import ProjectCard from '@/components/ProjectCard';
 import ProjectsFilters from '@/components/ProjectsFilters';
+import AddProjectButton from '@/components/AddProjectButton';
 import { FolderKanban } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -32,11 +33,14 @@ export default async function ProjectsPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div>
-        <h1 className="text-xl md:text-2xl font-bold">Projects</h1>
-        <p className="text-xs md:text-sm text-slate-500">
-          {total} projects · {inProgress} in progress · {onHold} on hold · {complete} complete
-        </p>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold">Projects</h1>
+          <p className="text-xs md:text-sm text-slate-500">
+            {total} projects · {inProgress} in progress · {onHold} on hold · {complete} complete
+          </p>
+        </div>
+        <AddProjectButton />
       </div>
 
       <ProjectsFilters
