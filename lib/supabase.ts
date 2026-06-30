@@ -17,6 +17,7 @@ export type Project = {
   target_end: string | null;
   pm: string | null;
   cover_url: string | null;
+  created_at?: string;
 };
 
 export type Task = {
@@ -45,4 +46,15 @@ export type Milestone = {
   due_date: string | null;
   status: string;
   type: string | null;
+};
+
+export type DocumentRow = {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  name: string;
+  bucket: string;
+  path: string;
+  uploaded_by: string | null;
+  created_at: string;
 };
