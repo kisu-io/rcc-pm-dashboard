@@ -34,19 +34,20 @@ export default function UploadDropzone({
         setError(upErr.message);
         continue;
       }
-      // Insert metadata row with folder_path, size, mimetype
-      if (projectId) {
-        await supabase.from('documents').insert({
-          project_id: projectId,
-          name: file.name,
-          bucket,
-          path: storagePath,
-          folder_path: folderPath,
-          size: file.size,
-          mimetype: file.type || null,
-          is_folder: false,
-          uploaded_by: 'web',
-        });
+      // Always insert metadata row (project_id nullable)
+      const { error: dbErr } = await supabase.from('documents').insert({
+        project_id: projectId || null,
+        name: file.name,
+        bucket,
+        path: storagePath,
+        folder_path: folderPath,
+        size: file.size,
+        mimetype: file.type || null,
+        is_folder: false,
+        uploaded_by: 'web',
+      });
+      if (dbErr) {
+        console.error('DB insert failed:', dbErr.message);
       }
       ok++;
     }
