@@ -1,4 +1,4 @@
-import { getTasks, getProjects } from '@/lib/data';
+import { getTasks, getProjects } from '@/lib/data-server';
 import GanttView from '@/components/GanttView';
 
 export const dynamic = 'force-dynamic';

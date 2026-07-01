@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { getProject, getTasks, getMilestones, getDocuments, formatVND, daysFromNow, isOverdue } from '@/lib/data';
+import { getProject, getTasks, getMilestones, getDocuments } from '@/lib/data-server';
+import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
 import EditProjectButton from '@/components/EditProjectButton';
 import AddMilestoneButton from '@/components/AddMilestoneButton';
 import ProjectDocuments from '@/components/ProjectDocuments';
+import EditGuard from '@/components/EditGuard';
 import { ArrowLeft, MapPin, Calendar, Wallet, User, FileText, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -67,7 +69,7 @@ export default async function ProjectDetail({ params }: { params: { id: string }
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_BADGE[project.status] || 'bg-slate-100'}`}>
             {project.status}
           </span>
-          <EditProjectButton project={project} />
+          <EditGuard><EditProjectButton project={project} /></EditGuard>
         </div>
       </div>
 
@@ -203,7 +205,7 @@ export default async function ProjectDetail({ params }: { params: { id: string }
         <div className="bg-white rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-sm">Milestones</h3>
-            <AddMilestoneButton projectId={project.id} />
+            <EditGuard><AddMilestoneButton projectId={project.id} /></EditGuard>
           </div>
           {milestones.length === 0 ? (
             <p className="text-xs text-slate-400 py-6 text-center">No milestones.</p>

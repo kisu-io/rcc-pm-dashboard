@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, ListTodo, Calendar,
-  FileText, Wallet, Boxes, Users, HardHat, Menu, X, CalendarDays,
+  FileText, Wallet, Boxes, Users, HardHat, Menu, X, CalendarDays, LogOut,
 } from 'lucide-react';
+import { useAuth } from '@/components/AuthProvider';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -22,6 +23,14 @@ const nav = [
 export default function Sidebar() {
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  const { user, role, signOut } = useAuth();
+
+  const roleBadge: Record<string, string> = {
+    pm: 'bg-blue-500/20 text-blue-300',
+    admin: 'bg-purple-500/20 text-purple-300',
+    viewer: 'bg-slate-500/20 text-slate-300',
+    anonymous: 'bg-slate-500/20 text-slate-400',
+  };
 
   return (
     <>
@@ -78,8 +87,31 @@ export default function Sidebar() {
             );
           })}
         </nav>
-        <div className="mt-auto px-3 text-xs text-slate-400">
-          Royal Canary Corp © 2026
+        <div className="mt-auto px-3 space-y-3">
+          {/* User info + logout */}
+          {user && (
+            <div className="border-t border-white/10 pt-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium truncate">{user.email}</div>
+                  <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full mt-0.5 ${roleBadge[role] || roleBadge.anonymous}`}>
+                    {role}
+                  </span>
+                </div>
+                <button
+                  onClick={() => signOut()}
+                  className="p-1.5 rounded hover:bg-white/10 text-slate-300"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="text-xs text-slate-400">
+            Royal Canary Corp © 2026
+          </div>
         </div>
       </aside>
 

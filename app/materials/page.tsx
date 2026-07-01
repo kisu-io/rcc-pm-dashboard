@@ -1,4 +1,5 @@
-import { getMaterials, getProjects, formatVND } from '@/lib/data';
+import { getMaterials, getProjects } from '@/lib/data-server';
+import { formatVND } from '@/lib/data';
 import { Boxes, Clock, AlertTriangle, Package, Truck, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 

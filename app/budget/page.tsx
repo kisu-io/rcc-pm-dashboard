@@ -1,4 +1,5 @@
-import { getProjects, getTasks, formatVND } from '@/lib/data';
+import { getProjects, getTasks } from '@/lib/data-server';
+import { formatVND } from '@/lib/data';
 import { Wallet, TrendingDown, TrendingUp, AlertTriangle } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';

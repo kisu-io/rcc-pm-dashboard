@@ -1,7 +1,8 @@
-import { getProjects, getTasks } from '@/lib/data';
+import { getProjects, getTasks } from '@/lib/data-server';
 import ProjectCard from '@/components/ProjectCard';
 import ProjectsFilters from '@/components/ProjectsFilters';
 import AddProjectButton from '@/components/AddProjectButton';
+import EditGuard from '@/components/EditGuard';
 import { FolderKanban } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function ProjectsPage() {
             {total} projects · {inProgress} in progress · {onHold} on hold · {complete} complete
           </p>
         </div>
-        <AddProjectButton />
+        <EditGuard><AddProjectButton /></EditGuard>
       </div>
 
       <ProjectsFilters

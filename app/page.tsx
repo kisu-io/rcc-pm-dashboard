@@ -1,4 +1,4 @@
-import { getProjects, getTasks } from '@/lib/data';
+import { getProjects, getTasks } from '@/lib/data-server';
 import KpiCard from '@/components/KpiCard';
 import StatusChart from '@/components/StatusChart';
 import ProgressChart from '@/components/ProgressChart';

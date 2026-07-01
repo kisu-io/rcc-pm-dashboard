@@ -1,4 +1,4 @@
-import { getTasks, getMilestones } from '@/lib/data';
+import { getTasks, getMilestones } from '@/lib/data-server';
 import CalendarView from '@/components/CalendarView';
 
 export const dynamic = 'force-dynamic';

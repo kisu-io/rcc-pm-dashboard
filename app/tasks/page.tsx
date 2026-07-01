@@ -1,6 +1,7 @@
-import { getTasks, getProjects } from '@/lib/data';
+import { getTasks, getProjects } from '@/lib/data-server';
 import KanbanBoard from '@/components/KanbanBoard';
 import AddTaskModal from '@/components/AddTaskModal';
+import EditGuard from '@/components/EditGuard';
 import TaskFilters from '@/components/TaskFilters';
 import { Task, Project } from '@/lib/supabase';
 
@@ -16,7 +17,7 @@ export default async function TasksPage() {
           <h1 className="text-xl md:text-2xl font-bold">Tasks — Kanban</h1>
           <p className="text-xs md:text-sm text-slate-500">Kéo-thả task giữa các cột để cập nhật trạng thái</p>
         </div>
-        <AddTaskModal projects={projects} />
+        <EditGuard><AddTaskModal projects={projects} /></EditGuard>
       </div>
       <TaskFiltersServer tasks={tasks} projects={projects} projMap={projMap} />
     </div>

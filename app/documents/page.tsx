@@ -1,4 +1,4 @@
-import { getDocuments, getProjects } from '@/lib/data';
+import { getDocuments, getProjects } from '@/lib/data-server';
 import DocumentsDrive from '@/components/DocumentsDrive';
 
 export const dynamic = 'force-dynamic';
