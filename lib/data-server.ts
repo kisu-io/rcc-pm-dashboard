@@ -10,7 +10,7 @@ const hasKey =
 
 export async function getProjects(): Promise<Project[]> {
   if (!hasKey) return demoProjects;
-  const s = await createServerSupabase();
+  const s = createServerSupabase();
   const { data, error } = await s.from('projects').select('*').order('created_at');
   if (error || !data?.length) return demoProjects;
   return data as Project[];
@@ -18,7 +18,7 @@ export async function getProjects(): Promise<Project[]> {
 
 export async function getProject(id: string): Promise<Project | null> {
   if (!hasKey) return demoProjects.find((p) => p.id === id) || null;
-  const s = await createServerSupabase();
+  const s = createServerSupabase();
   const { data, error } = await s.from('projects').select('*').eq('id', id).maybeSingle();
   if (error || !data) return null;
   return data as Project;
@@ -26,7 +26,7 @@ export async function getProject(id: string): Promise<Project | null> {
 
 export async function getTasks(projectId?: string): Promise<Task[]> {
   if (!hasKey) return projectId ? demoTasks.filter((t) => t.project_id === projectId) : demoTasks;
-  const s = await createServerSupabase();
+  const s = createServerSupabase();
   let q = s.from('tasks').select('*').order('due_date');
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
@@ -36,7 +36,7 @@ export async function getTasks(projectId?: string): Promise<Task[]> {
 
 export async function getMilestones(projectId?: string): Promise<Milestone[]> {
   if (!hasKey) return projectId ? demoMilestones.filter((m) => m.project_id === projectId) : demoMilestones;
-  const s = await createServerSupabase();
+  const s = createServerSupabase();
   let q = s.from('milestones').select('*').order('due_date');
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
@@ -46,7 +46,7 @@ export async function getMilestones(projectId?: string): Promise<Milestone[]> {
 
 export async function getDocuments(projectId?: string): Promise<DocumentRow[]> {
   if (!hasKey) return [];
-  const s = await createServerSupabase();
+  const s = createServerSupabase();
   let q = s.from('documents').select('*').order('created_at', { ascending: false });
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
@@ -59,7 +59,7 @@ export async function getDocuments(projectId?: string): Promise<DocumentRow[]> {
 
 export async function getMaterials(projectId?: string): Promise<Material[]> {
   if (!hasKey) return [];
-  const s = await createServerSupabase();
+  const s = createServerSupabase();
   let q = s.from('materials').select('*').order('created_at', { ascending: false });
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
