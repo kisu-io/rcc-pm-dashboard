@@ -5,6 +5,10 @@ import { X, Plus, Loader2, Pencil, Trash2 } from 'lucide-react';
 
 const STATUSES = ['Not Started', 'In Progress', 'On Hold', 'Complete', 'Pending', 'Upcoming'];
 
+// Demo data IDs ('1','2','3','4') are not valid UUIDs — block writes on them
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isRealProject = (p?: Project | null) => !!p && UUID_RE.test(p.id);
+
 type Props = {
   project?: Project | null;
   onSaved?: () => void;
@@ -45,6 +49,7 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
         cover_url: project.cover_url || '',
       });
     }
+    setError(null);
     setOpen(true);
   }
 
@@ -54,13 +59,17 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
       setError('Cần nhập tên project');
       return;
     }
+    if (isEdit && !isRealProject(project)) {
+      setError('Không thể sửa project demo — dữ liệu thật chưa tải từ database.');
+      return;
+    }
     setSaving(true);
     setError(null);
     const payload = {
       name: form.name.trim(),
       location: form.location || null,
       status: form.status,
-      progress_pct: Number(form.progress_pct) || 0,
+      progress_pct: form.progress_pct ? Number(form.progress_pct) : 0,
       budget: form.budget === '' ? null : Number(form.budget),
       spent: Number(form.spent) || 0,
       start_date: form.start_date || null,
@@ -85,6 +94,10 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
 
   async function deleteProject() {
     if (!project) return;
+    if (!isRealProject(project)) {
+      setError('Không thể xoá project demo — đây là dữ liệu mẫu, không có trong database.');
+      return;
+    }
     if (!confirm(`Delete "${project.name}"? This also deletes all its tasks, milestones, and documents.`)) return;
     setSaving(true);
     const { error: err } = await supabase.from('projects').delete().eq('id', project.id);
@@ -99,6 +112,7 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
 
   const inputCls = 'w-full text-xs md:text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30';
   const labelCls = 'text-[10px] text-slate-400 uppercase font-medium';
+  const demoBlockWarning = isEdit && !isRealProject(project);
 
   return (
     <>
@@ -134,6 +148,12 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
 
             <div className="p-4 space-y-3">
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">⚠ {error}</div>}
+
+              {demoBlockWarning && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  ⚠ Đây là project demo (dữ liệu mẫu). Không thể edit/delete — database chưa kết nối hoặc chưa có data thật.
+                </div>
+              )}
 
               <div>
                 <label className={labelCls}>Name *</label>
@@ -197,8 +217,9 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
                 <button
                   type="button"
                   onClick={deleteProject}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                  disabled={saving || demoBlockWarning}
+                  className="inline-flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={demoBlockWarning ? 'Không thể xoá project demo' : 'Delete project'}
                 >
                   <Trash2 size={14} /> Delete
                 </button>
@@ -207,8 +228,8 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
                 <button type="button" onClick={() => setOpen(false)} className="text-xs px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-1.5 text-xs bg-[#2563eb] text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  disabled={saving || demoBlockWarning}
+                  className="inline-flex items-center gap-1.5 text-xs bg-[#2563eb] text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin" /> : isEdit ? <Pencil size={14} /> : <Plus size={14} />}
                   {isEdit ? 'Save changes' : 'Create project'}
