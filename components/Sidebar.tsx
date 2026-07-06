@@ -62,9 +62,9 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Sidebar — drawer on mobile, static on md+ */}
+      {/* Sidebar — drawer on mobile, sticky on md+ */}
       <aside
-        className={`fixed md:static top-14 md:top-0 left-0 z-50 md:z-auto
+        className={`fixed md:sticky top-14 md:top-0 left-0 z-50 md:z-auto
           w-60 bg-[#0F1B3D] text-white flex flex-col py-5 px-3 shrink-0
           h-[calc(100vh-3.5rem)] md:h-screen
           transition-transform duration-200
