@@ -5,7 +5,7 @@ import UploadDropzone from '@/components/UploadDropzone';
 import {
   FileText, Image as ImageIcon, File, Video, Music, FileSpreadsheet,
   Folder, Trash2, Download, Pencil, Search, ChevronRight, Home,
-  Grid3x3, List, X, ExternalLink, MoreVertical, FolderPlus, Loader2,
+  Grid3x3, List, X, ExternalLink, MoreVertical, FolderPlus, Loader2, Building2,
 } from 'lucide-react';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://eyxqbpcgrunksmirsiia.supabase.co';
@@ -66,6 +66,7 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<DocumentRow | null>(null);
   const [moving, setMoving] = useState<DocumentRow | null>(null);
+  const [assigning, setAssigning] = useState<DocumentRow | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -207,6 +208,20 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
     setRefreshKey((k) => k + 1);
   }
 
+  // Reassign a document (and, for folders, its descendants) to another project.
+  async function assignProject(d: DocumentRow, projectId: string) {
+    if (!projectId || projectId === d.project_id) { setAssigning(null); return; }
+    const { error } = await supabase.from('documents').update({ project_id: projectId }).eq('id', d.id);
+    if (error) { alert(error.message); return; }
+    if (d.is_folder) {
+      const prefix = d.folder_path ? `${d.folder_path}/${d.name}` : d.name;
+      await supabase.from('documents').update({ project_id: projectId })
+        .eq('bucket', d.bucket).like('folder_path', `${prefix}%`);
+    }
+    setAssigning(null);
+    setRefreshKey((k) => k + 1);
+  }
+
   // ===== UI =====
 
   const selectCls = 'text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30';
@@ -299,14 +314,24 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
         </div>
       )}
 
-      {/* Upload dropzone */}
+      {/* Upload dropzone — requires a project so every file is linked to one */}
       {!q.trim() && (
-        <UploadDropzone
-          bucket={bucket}
-          projectId={projFilter !== 'all' ? projFilter : undefined}
-          folderPath={folder}
-          onUploaded={() => setRefreshKey((k) => k + 1)}
-        />
+        projFilter !== 'all' ? (
+          <UploadDropzone
+            bucket={bucket}
+            projectId={projFilter}
+            folderPath={folder}
+            onUploaded={() => setRefreshKey((k) => k + 1)}
+          />
+        ) : (
+          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 md:p-6 text-center bg-white">
+            <Building2 className="mx-auto text-slate-400 mb-2" size={28} />
+            <p className="text-xs md:text-sm text-slate-600 font-medium">Chọn một project để upload</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Pick a project from the dropdown above — files must belong to a project so they show on that project&apos;s page.
+            </p>
+          </div>
+        )
       )}
 
       {/* Files list */}
@@ -345,7 +370,8 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
                       <a href={publicUrl(d.bucket, d.path)} download className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Download size={12} /> Download</a>
                     )}
                     <button onClick={() => { setRenaming(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Pencil size={12} /> Rename</button>
-                    <button onClick={() => { setMoving(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Folder size={12} /> Move</button>
+                    <button onClick={() => { setMoving(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Folder size={12} /> Move folder</button>
+                    <button onClick={() => { setAssigning(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Building2 size={12} /> Move to project</button>
                     <button onClick={() => deleteDoc(d)} className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={12} /> Delete</button>
                   </div>
                 )}
@@ -395,7 +421,8 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
                           <a href={publicUrl(d.bucket, d.path)} download onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-slate-200 rounded" title="Download"><Download size={12} /></a>
                         )}
                         <button onClick={(e) => { e.stopPropagation(); setRenaming(d); }} className="p-1 hover:bg-slate-200 rounded" title="Rename"><Pencil size={12} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setMoving(d); }} className="p-1 hover:bg-slate-200 rounded" title="Move"><Folder size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setMoving(d); }} className="p-1 hover:bg-slate-200 rounded" title="Move to folder"><Folder size={12} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setAssigning(d); }} className="p-1 hover:bg-slate-200 rounded" title="Move to project"><Building2 size={12} /></button>
                         <button onClick={(e) => { e.stopPropagation(); deleteDoc(d); }} className="p-1 hover:bg-red-100 text-red-600 rounded" title="Delete"><Trash2 size={12} /></button>
                       </div>
                     </td>
@@ -413,7 +440,7 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
       {/* Rename modal */}
       {renaming && <RenameModal doc={renaming} onClose={() => setRenaming(null)} onSubmit={(n) => renameDoc(renaming, n)} />}
 
-      {/* Move modal */}
+      {/* Move-to-folder modal */}
       {moving && (
         <MoveModal
           doc={moving}
@@ -422,6 +449,52 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
           onSubmit={(f) => moveDoc(moving, f)}
         />
       )}
+
+      {/* Move-to-project modal */}
+      {assigning && (
+        <AssignProjectModal
+          doc={assigning}
+          projects={projects}
+          onClose={() => setAssigning(null)}
+          onSubmit={(pid) => assignProject(assigning, pid)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===== Assign-to-Project Modal =====
+function AssignProjectModal({ doc, projects, onClose, onSubmit }: {
+  doc: DocumentRow; projects: Project[]; onClose: () => void; onSubmit: (projectId: string) => void;
+}) {
+  const [target, setTarget] = useState(doc.project_id || '');
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-semibold text-sm">Move &quot;{doc.name}&quot; to project</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={16} /></button>
+        </div>
+        <div className="p-4 space-y-1 max-h-80 overflow-y-auto">
+          {projects.length === 0 && <p className="text-xs text-slate-400 py-2">No projects yet.</p>}
+          {projects.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setTarget(p.id)}
+              className={`w-full text-left text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${target === p.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50'}`}
+            >
+              <Building2 size={14} /> {p.name}
+            </button>
+          ))}
+        </div>
+        {doc.is_folder && (
+          <p className="px-4 pb-2 text-[10px] text-slate-400">Files inside this folder move with it.</p>
+        )}
+        <div className="p-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="text-xs px-3 py-1.5 rounded hover:bg-slate-100">Cancel</button>
+          <button onClick={() => onSubmit(target)} disabled={!target} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50">Move here</button>
+        </div>
+      </div>
     </div>
   );
 }
