@@ -63,7 +63,7 @@ export default function TaskEditModal({
     const { error: err } = await supabase.from('tasks').update(payload).eq('id', task.id);
     setSaving(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
       return;
     }
     onSaved?.();
@@ -76,7 +76,7 @@ export default function TaskEditModal({
     const { error: err } = await supabase.from('tasks').delete().eq('id', task.id);
     setSaving(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
       return;
     }
     onSaved?.();

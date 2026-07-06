@@ -80,10 +80,10 @@ security definer
 set search_path = public
 as $$
 begin
-  -- Only admins may call this
+  -- Only admins may call this (alias ur to avoid column ambiguity)
   if not exists (
-    select 1 from public.user_roles
-    where user_id = auth.uid() and role = 'admin'
+    select 1 from public.user_roles ur
+    where ur.user_id = auth.uid() and ur.role = 'admin'
   ) then
     raise exception 'admin only' using errcode = '42501';
   end if;

@@ -74,7 +74,7 @@ export default function CostEntryModal({
       : await supabase.from('cost_entries').insert(payload);
     setSaving(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
       return;
     }
     onSaved();
@@ -87,7 +87,7 @@ export default function CostEntryModal({
     const { error: err } = await supabase.from('cost_entries').delete().eq('id', entry!.id);
     setDeleting(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
       return;
     }
     onSaved();

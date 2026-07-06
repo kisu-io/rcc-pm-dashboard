@@ -85,7 +85,12 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
     }
     setSaving(false);
     if (err) {
-      setError(err.message);
+      // Friendly error for RLS violations
+      if (err.message.includes('row-level security') || err.message.includes('RLS')) {
+        setError('Không có quyền ghi. Bạn cần đăng nhập với role PM hoặc Admin. Thử logout rồi login lại.');
+      } else {
+        setError(err.message);
+      }
       return;
     }
     setOpen(false);

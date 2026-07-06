@@ -82,7 +82,7 @@ export default function MaterialModal({
       : await supabase.from('materials').insert(payload);
     setSaving(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
       return;
     }
     onSaved();
@@ -95,7 +95,7 @@ export default function MaterialModal({
     const { error: err } = await supabase.from('materials').delete().eq('id', material!.id);
     setDeleting(false);
     if (err) {
-      setError(err.message);
+      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
       return;
     }
     onSaved();
