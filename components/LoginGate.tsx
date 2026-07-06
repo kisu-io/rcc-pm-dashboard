@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { HardHat, Mail, Loader2, LogIn, AlertTriangle, UserPlus, Lock } from 'lucide-react';
 
 export default function LoginGate() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,8 +17,30 @@ export default function LoginGate() {
     setError(null);
     setInfo(null);
 
-    if (!email.trim() || !password) {
-      setError('Nhập email + mật khẩu');
+    if (!email.trim()) {
+      setError('Nhập email');
+      return;
+    }
+
+    if (mode === 'reset') {
+      if (!password || password.length < 6) {
+        setError('Mật khẩu mới tối thiểu 6 ký tự');
+        return;
+      }
+      setLoading(true);
+      const { error: err } = await supabase.auth.updateUser({ password });
+      setLoading(false);
+      if (err) {
+        setError(err.message);
+        return;
+      }
+      setInfo('Mật khẩu đã cập nhật. Đăng nhập lại.');
+      setMode('login');
+      return;
+    }
+
+    if (!password) {
+      setError('Nhập mật khẩu');
       return;
     }
 
@@ -42,11 +64,9 @@ export default function LoginGate() {
         return;
       }
       if (data.user && !data.session) {
-        // Email confirmation required
         setInfo('Tài khoản đã tạo. Kiểm tra email để xác nhận, rồi đăng nhập.');
         setMode('login');
       } else if (data.session) {
-        // Auto-logged in (if email confirm disabled)
         window.location.reload();
       }
     } else {
@@ -62,6 +82,25 @@ export default function LoginGate() {
       }
       window.location.reload();
     }
+  }
+
+  async function sendPasswordReset() {
+    if (!email.trim()) {
+      setError('Nhập email để gửi link reset mật khẩu');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined;
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+    setLoading(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setInfo('Link reset mật khẩu đã gửi tới email. Bấm link, rồi đặt mật khẩu mới.');
   }
 
   return (
@@ -100,12 +139,14 @@ export default function LoginGate() {
 
           <div>
             <h1 className="text-lg font-bold mb-1">
-              {mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+              {mode === 'login' ? 'Đăng nhập' : mode === 'register' ? 'Tạo tài khoản' : 'Đặt mật khẩu mới'}
             </h1>
             <p className="text-xs text-slate-500">
               {mode === 'login'
                 ? 'Nhập email + mật khẩu để truy cập dashboard.'
-                : 'Đăng ký với email + mật khẩu. Role mặc định: viewer.'}
+                : mode === 'register'
+                ? 'Đăng ký với email + mật khẩu. Role mặc định: viewer.'
+                : 'Nhập email + mật khẩu mới. Link xác nhận sẽ gửi qua email.'}
             </p>
           </div>
 
@@ -178,14 +219,18 @@ export default function LoginGate() {
                 <Loader2 size={16} className="animate-spin" />
               ) : mode === 'login' ? (
                 <LogIn size={16} />
-              ) : (
+              ) : mode === 'register' ? (
                 <UserPlus size={16} />
+              ) : (
+                <Mail size={16} />
               )}
               {loading
                 ? 'Đang xử lý…'
                 : mode === 'login'
                 ? 'Đăng nhập'
-                : 'Tạo tài khoản'}
+                : mode === 'register'
+                ? 'Tạo tài khoản'
+                : 'Gửi link reset'}
             </button>
           </form>
 
@@ -194,10 +239,18 @@ export default function LoginGate() {
               Chưa có tài khoản?{' '}
               <button
                 type="button"
-                onClick={() => { setMode('register'); setError(null); }}
+                onClick={() => { setMode('register'); setError(null); setInfo(null); }}
                 className="text-blue-600 hover:underline font-medium"
               >
                 Đăng ký
+              </button>
+              {' · '}
+              <button
+                type="button"
+                onClick={() => { setMode('reset'); setError(null); setInfo(null); }}
+                className="text-blue-600 hover:underline font-medium"
+              >
+                Quên mật khẩu?
               </button>
             </p>
           )}
@@ -206,7 +259,19 @@ export default function LoginGate() {
               Đã có tài khoản?{' '}
               <button
                 type="button"
-                onClick={() => { setMode('login'); setError(null); }}
+                onClick={() => { setMode('login'); setError(null); setInfo(null); }}
+                className="text-blue-600 hover:underline font-medium"
+              >
+                Đăng nhập
+              </button>
+            </p>
+          )}
+          {mode === 'reset' && (
+            <p className="text-[10px] text-slate-400 text-center pt-2">
+              Đã nhớ mật khẩu?{' '}
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(null); setInfo(null); }}
                 className="text-blue-600 hover:underline font-medium"
               >
                 Đăng nhập
