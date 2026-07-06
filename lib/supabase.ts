@@ -1,9 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(url, anon);
+// Use createBrowserClient from @supabase/ssr so session is synced to cookies
+// (server-side createServerSupabase reads from cookies — without this, RLS
+// blocks all reads because auth.uid() is null on the server).
+export const supabase = createBrowserClient(url, anon);
 
 export type Project = {
   id: string;

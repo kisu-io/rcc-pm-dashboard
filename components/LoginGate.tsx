@@ -1,9 +1,11 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { HardHat, Mail, Loader2, LogIn, AlertTriangle, UserPlus, Lock } from 'lucide-react';
 
 export default function LoginGate() {
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -67,7 +69,9 @@ export default function LoginGate() {
         setInfo('Tài khoản đã tạo. Kiểm tra email để xác nhận, rồi đăng nhập.');
         setMode('login');
       } else if (data.session) {
-        window.location.reload();
+        // Full redirect to ensure middleware refreshes session cookie
+        router.replace('/');
+        router.refresh();
       }
     } else {
       setLoading(true);
@@ -80,7 +84,9 @@ export default function LoginGate() {
         setError(err.message.includes('Invalid login') ? 'Email hoặc mật khẩu sai' : err.message);
         return;
       }
-      window.location.reload();
+      // Full redirect to ensure middleware refreshes session cookie
+      router.replace('/');
+      router.refresh();
     }
   }
 
