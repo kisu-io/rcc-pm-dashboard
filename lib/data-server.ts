@@ -8,11 +8,14 @@ const hasKey =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Demo fallback ONLY when no Supabase env vars (local dev without .env).
-// Production (with env vars) always returns real data or empty — never demo.
+// E2E mode: use demo data (dummy Supabase key, bypass auth)
+const isE2E = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
+
+// Demo fallback ONLY when no Supabase env vars (local dev) OR E2E bypass mode.
+// Production (with real env vars, no bypass) always returns real data or empty.
 
 export async function getProjects(): Promise<Project[]> {
-  if (!hasKey) return demoProjects;
+  if (!hasKey || isE2E) return demoProjects;
   const s = createServerSupabase();
   const { data, error } = await s.from('projects').select('*').order('created_at');
   if (error) {
@@ -23,7 +26,7 @@ export async function getProjects(): Promise<Project[]> {
 }
 
 export async function getProject(id: string): Promise<Project | null> {
-  if (!hasKey) return demoProjects.find((p) => p.id === id) || null;
+  if (!hasKey || isE2E) return demoProjects.find((p) => p.id === id) || null;
   const s = createServerSupabase();
   const { data, error } = await s.from('projects').select('*').eq('id', id).maybeSingle();
   if (error) {
@@ -34,7 +37,7 @@ export async function getProject(id: string): Promise<Project | null> {
 }
 
 export async function getTasks(projectId?: string): Promise<Task[]> {
-  if (!hasKey) return projectId ? demoTasks.filter((t) => t.project_id === projectId) : demoTasks;
+  if (!hasKey || isE2E) return projectId ? demoTasks.filter((t) => t.project_id === projectId) : demoTasks;
   const s = createServerSupabase();
   let q = s.from('tasks').select('*').order('due_date');
   if (projectId) q = q.eq('project_id', projectId);
@@ -47,7 +50,7 @@ export async function getTasks(projectId?: string): Promise<Task[]> {
 }
 
 export async function getMilestones(projectId?: string): Promise<Milestone[]> {
-  if (!hasKey) return projectId ? demoMilestones.filter((m) => m.project_id === projectId) : demoMilestones;
+  if (!hasKey || isE2E) return projectId ? demoMilestones.filter((m) => m.project_id === projectId) : demoMilestones;
   const s = createServerSupabase();
   let q = s.from('milestones').select('*').order('due_date');
   if (projectId) q = q.eq('project_id', projectId);

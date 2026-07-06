@@ -47,6 +47,8 @@ jobs:
 
       - name: Run E2E tests
         run: npx playwright test --reporter=list
+        env:
+          NEXT_PUBLIC_E2E_BYPASS_AUTH: '1'
 
       - uses: actions/upload-artifact@v4
         if: failure()
