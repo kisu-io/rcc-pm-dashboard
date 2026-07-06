@@ -1,5 +1,5 @@
 import { getProjects, getTasks } from '@/lib/data-server';
-import { Users, Mail, Phone, Briefcase } from 'lucide-react';
+import { Users, Briefcase } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 

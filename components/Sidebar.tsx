@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, ListTodo, Calendar,
-  FileText, Wallet, Boxes, Users, HardHat, Menu, X, CalendarDays, LogOut,
+  FileText, Wallet, Boxes, Users, HardHat, Menu, X, CalendarDays, LogOut, ShieldAlert, ScrollText,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -18,6 +18,11 @@ const nav = [
   { href: '/budget', label: 'Budget & Cost', icon: Wallet },
   { href: '/materials', label: 'Materials', icon: Boxes },
   { href: '/team', label: 'Team', icon: Users },
+];
+
+const adminNav = [
+  { href: '/admin/users', label: 'Admin · Users', icon: ShieldAlert },
+  { href: '/admin/activity', label: 'Admin · Activity', icon: ScrollText },
 ];
 
 export default function Sidebar() {
@@ -86,6 +91,26 @@ export default function Sidebar() {
               </Link>
             );
           })}
+          {role === 'admin' && (
+            <div className="border-t border-white/10 mt-2 pt-3 space-y-1">
+              {adminNav.map(({ href, label, icon: Icon }) => {
+                const active = path === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
+                      active ? 'bg-purple-600 text-white' : 'text-purple-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </nav>
         <div className="mt-auto px-3 space-y-3">
           {/* User info + logout */}

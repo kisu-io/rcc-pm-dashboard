@@ -82,3 +82,17 @@ export type Material = {
   notes: string | null;
   created_at?: string;
 };
+
+export type CostEntry = {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  date: string;
+  category: string | null;
+  vendor: string | null;
+  description: string;
+  amount: number;
+  invoice_ref: string | null;
+  created_by: string | null;
+  created_at: string;
+};

@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { getProject, getTasks, getMilestones, getDocuments } from '@/lib/data-server';
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
 import EditProjectButton from '@/components/EditProjectButton';
-import AddMilestoneButton from '@/components/AddMilestoneButton';
-import ProjectDocuments from '@/components/ProjectDocuments';
 import EditGuard from '@/components/EditGuard';
+import MilestonesList from '@/components/MilestonesList';
+import ProjectDocuments from '@/components/ProjectDocuments';
 import { ArrowLeft, MapPin, Calendar, Wallet, User, FileText, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -21,11 +21,6 @@ const STATUS_BADGE: Record<string, string> = {
 
 const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
 const PRIO_COLOR: Record<string, string> = { High: '#ef4444', Medium: '#f59e0b', Low: '#22c55e' };
-const MS_STATUS_COLOR: Record<string, string> = {
-  'Reached': '#22c55e',
-  'Pending': '#f59e0b',
-  'Missed': '#ef4444',
-};
 
 export default async function ProjectDetail({ params }: { params: { id: string } }) {
   const project = await getProject(params.id);
@@ -201,35 +196,8 @@ export default async function ProjectDetail({ params }: { params: { id: string }
           )}
         </div>
 
-        {/* Milestones */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm">Milestones</h3>
-            <EditGuard><AddMilestoneButton projectId={project.id} /></EditGuard>
-          </div>
-          {milestones.length === 0 ? (
-            <p className="text-xs text-slate-400 py-6 text-center">No milestones.</p>
-          ) : (
-            <div className="space-y-3">
-              {milestones.map((m) => (
-                <div key={m.id} className="flex items-start gap-3">
-                  <div className="mt-0.5">
-                    {m.status === 'Reached' ? <CheckCircle2 size={16} className="text-green-500" />
-                      : m.status === 'Missed' ? <AlertTriangle size={16} className="text-red-500" />
-                      : <Clock size={16} className="text-amber-500" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium truncate">{m.name}</div>
-                    <div className="text-[10px] text-slate-500">
-                      {m.due_date || '—'} · <span style={{ color: MS_STATUS_COLOR[m.status] || '#94a3b8' }}>{m.status}</span>
-                      {m.type && <span> · {m.type}</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Milestones — client list with add/edit/delete */}
+        <MilestonesList projectId={project.id} milestones={milestones} />
       </div>
 
       {/* Documents — project-scoped drive */}
