@@ -8,23 +8,29 @@ const hasKey =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Demo fallback ONLY when no Supabase env vars (local dev without .env).
+// Production (with env vars) always returns real data or empty — never demo.
+
 export async function getProjects(): Promise<Project[]> {
   if (!hasKey) return demoProjects;
   const s = createServerSupabase();
   const { data, error } = await s.from('projects').select('*').order('created_at');
-  if (error || !data?.length) return demoProjects;
-  return data as Project[];
+  if (error) {
+    console.error('[getProjects] error:', error.message);
+    return [];
+  }
+  return (data as Project[]) || [];
 }
 
 export async function getProject(id: string): Promise<Project | null> {
   if (!hasKey) return demoProjects.find((p) => p.id === id) || null;
   const s = createServerSupabase();
   const { data, error } = await s.from('projects').select('*').eq('id', id).maybeSingle();
-  if (error || !data) {
-    // Fall back to demo data if the lookup fails (e.g. dummy key / network error)
-    return demoProjects.find((p) => p.id === id) || null;
+  if (error) {
+    console.error('[getProject] error:', error.message);
+    return null;
   }
-  return data as Project;
+  return (data as Project) || null;
 }
 
 export async function getTasks(projectId?: string): Promise<Task[]> {
@@ -33,11 +39,11 @@ export async function getTasks(projectId?: string): Promise<Task[]> {
   let q = s.from('tasks').select('*').order('due_date');
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
-  if (error || !data?.length) {
-    // Fall back to demo data on error (e.g. dummy key / network error)
-    return projectId ? demoTasks.filter((t) => t.project_id === projectId) : demoTasks;
+  if (error) {
+    console.error('[getTasks] error:', error.message);
+    return [];
   }
-  return data as Task[];
+  return (data as Task[]) || [];
 }
 
 export async function getMilestones(projectId?: string): Promise<Milestone[]> {
@@ -46,11 +52,11 @@ export async function getMilestones(projectId?: string): Promise<Milestone[]> {
   let q = s.from('milestones').select('*').order('due_date');
   if (projectId) q = q.eq('project_id', projectId);
   const { data, error } = await q;
-  if (error || !data?.length) {
-    // Fall back to demo data on error (e.g. dummy key / network error)
-    return projectId ? demoMilestones.filter((m) => m.project_id === projectId) : demoMilestones;
+  if (error) {
+    console.error('[getMilestones] error:', error.message);
+    return [];
   }
-  return data as Milestone[];
+  return (data as Milestone[]) || [];
 }
 
 export async function getDocuments(projectId?: string): Promise<DocumentRow[]> {
