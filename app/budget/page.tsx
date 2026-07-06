@@ -1,5 +1,6 @@
-import { getProjects, getTasks } from '@/lib/data-server';
+import { getProjects, getTasks, getCostEntries } from '@/lib/data-server';
 import { formatVND } from '@/lib/data';
+import CostEntriesTable from '@/components/CostEntriesTable';
 import { Wallet, TrendingDown, TrendingUp, AlertTriangle } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default async function BudgetPage() {
-  const [projects, tasks] = await Promise.all([getProjects(), getTasks()]);
+  const [projects, tasks, costEntries] = await Promise.all([getProjects(), getTasks(), getCostEntries()]);
 
   const totalBudget = projects.reduce((s, p) => s + (p.budget || 0), 0);
   const totalSpent = projects.reduce((s, p) => s + p.spent, 0);
@@ -116,6 +117,9 @@ export default async function BudgetPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Cost entries — line-item CRUD, roll-up drives projects.spent via trigger */}
+      <CostEntriesTable entries={costEntries} projects={projects} tasks={tasks} />
     </div>
   );
 }

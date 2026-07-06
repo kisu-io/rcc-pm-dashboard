@@ -7,3 +7,8 @@ node_modules
 .vercel
 next-env.d.ts
 supabase/.temp
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/tsconfig.tsbuildinfo
