@@ -92,14 +92,24 @@ export async function getCostEntries(projectId?: string): Promise<CostEntry[]> {
   return (data as CostEntry[]) || [];
 }
 
-/** Server-side: returns the current user's role (or 'anonymous'). */
+/** Server-side: returns the current user's role (or 'anonymous').
+ *  Uses the security-definer RPC `current_user_role()` to bypass RLS
+ *  (the direct select on user_roles can fail if the SSR cookie session
+ *  isn't fully hydrated on first render).
+ */
 export async function getServerRole(): Promise<'anonymous' | 'viewer' | 'pm' | 'admin'> {
   if (!hasKey) return 'anonymous';
   const s = createServerSupabase();
   const { data: { user } } = await s.auth.getUser();
   if (!user) return 'anonymous';
-  const { data } = await s.from('user_roles').select('role').eq('user_id', user.id).maybeSingle();
-  return (data?.role as 'viewer' | 'pm' | 'admin') || 'viewer';
+  const { data, error } = await s.rpc('current_user_role');
+  if (error) {
+    console.error('[getServerRole] RPC error:', error.message);
+    // Fallback to direct query if RPC missing (pre-phase-3 schema)
+    const { data: row } = await s.from('user_roles').select('role').eq('user_id', user.id).maybeSingle();
+    return (row?.role as 'viewer' | 'pm' | 'admin') || 'viewer';
+  }
+  return (data as string) as 'anonymous' | 'viewer' | 'pm' | 'admin';
 }
 
 /** Server-side: list all users with roles (admin only — RPC enforces). */
