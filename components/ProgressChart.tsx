@@ -47,8 +47,10 @@ function cumulativeSeries(
 ) {
   // For each bucket, compute cumulative completion percentage.
   // Strategy: weigh each task by its share of the project's total effort.
-  // A task contributes progress_pct when it's finished (end <= bucket date),
-  // partial progress when in progress (start <= bucket < end), 0 otherwise.
+  //   - Planned: task contributes 0→100% ramp across planned_start→planned_end,
+  //              then 100% after planned_end (planned to finish 100% by that date).
+  //   - Actual: task contributes 0→progress_pct ramp across actual_start→actual_end
+  //              (or planned dates if actual missing), then holds at progress_pct.
   const projTasks = project
     ? tasks.filter((t) => t.project_id === project.id)
     : tasks;
@@ -65,17 +67,20 @@ function cumulativeSeries(
 
   return buckets.map((b) => {
     let cumWeighted = 0;
-    projTasks.forEach((t) => {
+    projTasks.forEach((t, idx) => {
       const start = kind === 'planned' ? parseDate(t.planned_start) : (parseDate(t.actual_start) || parseDate(t.planned_start));
       const end = kind === 'planned' ? parseDate(t.planned_end) : (parseDate(t.actual_end) || parseDate(t.planned_end));
       if (!start || !end) return;
       const dur = Math.max(end.getTime() - start.getTime(), WEEK_MS);
-      const weight = dur / totalEffort;
+      const weight = taskDurs[idx] / totalEffort;
       if (b.date.getTime() >= end.getTime()) {
-        cumWeighted += weight * t.progress_pct;
+        // Task complete by this week
+        cumWeighted += weight * (kind === 'planned' ? 100 : t.progress_pct);
       } else if (b.date.getTime() >= start.getTime()) {
+        // Task in progress — linear interpolation
         const frac = (b.date.getTime() - start.getTime()) / dur;
-        cumWeighted += weight * Math.min(frac * 100, t.progress_pct);
+        const target = kind === 'planned' ? 100 : t.progress_pct;
+        cumWeighted += weight * Math.min(frac * 100, target);
       }
     });
     return cumWeighted;
@@ -105,7 +110,7 @@ export default function ProgressChart({ projects, tasks }: Props) {
     const minDate = startDates.length ? new Date(Math.min(...startDates.map((d) => d.getTime()))) : new Date();
     const maxDate = endDates.length ? new Date(Math.max(...endDates.map((d) => d.getTime()))) : new Date(minDate.getTime() + 6 * WEEK_MS);
     const totalWeeks = Math.max(Math.ceil((maxDate.getTime() - minDate.getTime()) / WEEK_MS), 1);
-    const weekCount = Math.min(Math.max(totalWeeks, 4), 12);
+    const weekCount = Math.min(Math.max(totalWeeks, 4), 30);
 
     const buckets: { label: string; date: Date }[] = [];
     for (let i = 0; i < weekCount; i++) {
@@ -155,8 +160,8 @@ export default function ProgressChart({ projects, tasks }: Props) {
               <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} unit="%" />
+          <XAxis dataKey="week" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={20} />
+          <YAxis tick={{ fontSize: 11 }} unit="%" domain={[0, 100]} />
           <Tooltip />
           <Legend />
           <Area type="monotone" dataKey="planned" stroke="#2563eb" fill="url(#p)" name="Planned" />
