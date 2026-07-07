@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, getTasks, getMilestones, getDocuments } from '@/lib/data-server';
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
+import { phaseBreakdown, PHASE_ORDER, PHASE_COLORS, PHASE_LABELS_VN } from '@/lib/phase';
 import EditProjectButton from '@/components/EditProjectButton';
 import EditGuard from '@/components/EditGuard';
 import MilestonesList from '@/components/MilestonesList';
@@ -19,7 +20,6 @@ const STATUS_BADGE: Record<string, string> = {
   'Upcoming': 'bg-cyan-100 text-cyan-700',
 };
 
-const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
 const PRIO_COLOR: Record<string, string> = { High: '#ef4444', Medium: '#f59e0b', Low: '#22c55e' };
 
 export default async function ProjectDetail({ params }: { params: { id: string } }) {
@@ -38,13 +38,11 @@ export default async function ProjectDetail({ params }: { params: { id: string }
   const constraints = tasks.filter((t) => t.constraint_note);
   const done = tasks.filter((t) => t.kanban_status === 'Done').length;
 
-  // Phase breakdown
-  const phaseStats = PHASES.map((phase) => {
-    const phaseTasks = tasks.filter((t) => t.phase === phase);
-    if (phaseTasks.length === 0) return null;
-    const avg = phaseTasks.reduce((s, t) => s + t.progress_pct, 0) / phaseTasks.length;
-    return { phase, avg: Math.round(avg), count: phaseTasks.length };
-  }).filter(Boolean) as { phase: string; avg: number; count: number }[];
+  // Phase breakdown (7-field summary: Budget + 5 phases + Overall %)
+  const phases = phaseBreakdown(project, tasks);
+  const budgetPct = project.budget ? Math.round((project.spent / project.budget) * 100) : 0;
+  const overBudget = project.budget != null && project.spent > project.budget;
+  const healthColor = overBudget ? '#ef4444' : budgetPct > 80 ? '#f59e0b' : '#22c55e';
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -131,25 +129,42 @@ export default async function ProjectDetail({ params }: { params: { id: string }
         </div>
       )}
 
-      {/* Phase breakdown */}
-      {phaseStats.length > 0 && (
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-semibold text-sm mb-3">Phase breakdown</h3>
-          <div className="space-y-2">
-            {phaseStats.map((p) => (
-              <div key={p.phase}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-medium">{p.phase}</span>
-                  <span className="text-slate-500">{p.avg}% · {p.count} tasks</span>
+      {/* 7-field Project Summary: Budget | 5 phases | Overall % */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-semibold text-sm mb-3">Project Summary</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          {/* 1. Budget */}
+          <div>
+            <div className="text-[9px] text-slate-400 uppercase">Ngân sách</div>
+            <div className="text-[11px] mt-0.5" style={{ color: healthColor }}>
+              {formatVND(project.spent)} / {formatVND(project.budget)}
+            </div>
+            <div className="text-[9px] text-slate-400">{budgetPct}% used</div>
+          </div>
+          {/* 2–6. Phase buckets */}
+          {PHASE_ORDER.map((b) => (
+            <div key={b}>
+              <div className="text-[9px] text-slate-400 uppercase">{PHASE_LABELS_VN[b]}</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full" style={{ width: `${phases[b]}%`, background: PHASE_COLORS[b] }} />
                 </div>
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#2563eb]" style={{ width: `${p.avg}%` }} />
-                </div>
+                <span className="text-[10px] font-medium">{phases[b]}%</span>
               </div>
-            ))}
+            </div>
+          ))}
+          {/* 7. Overall progress */}
+          <div>
+            <div className="text-[9px] text-slate-400 uppercase">Tiến độ tổng</div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#22c55e]" style={{ width: `${project.progress_pct}%` }} />
+              </div>
+              <span className="text-[10px] font-medium">{project.progress_pct}%</span>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Tasks + Milestones */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

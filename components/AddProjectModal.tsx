@@ -32,6 +32,11 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
     target_end: project?.target_end || '',
     pm: project?.pm || '',
     cover_url: project?.cover_url || '',
+    pct_legal: project?.pct_legal ?? 0,
+    pct_design: project?.pct_design ?? 0,
+    pct_procurement: project?.pct_procurement ?? 0,
+    pct_construction: project?.pct_construction ?? 0,
+    pct_sales: project?.pct_sales ?? 0,
   });
 
   function openModal() {
@@ -47,6 +52,11 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
         target_end: project.target_end || '',
         pm: project.pm || '',
         cover_url: project.cover_url || '',
+        pct_legal: project.pct_legal ?? 0,
+        pct_design: project.pct_design ?? 0,
+        pct_procurement: project.pct_procurement ?? 0,
+        pct_construction: project.pct_construction ?? 0,
+        pct_sales: project.pct_sales ?? 0,
       });
     }
     setError(null);
@@ -76,6 +86,11 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
       target_end: form.target_end || null,
       pm: form.pm || null,
       cover_url: form.cover_url || null,
+      pct_legal: Number(form.pct_legal) || 0,
+      pct_design: Number(form.pct_design) || 0,
+      pct_procurement: Number(form.pct_procurement) || 0,
+      pct_construction: Number(form.pct_construction) || 0,
+      pct_sales: Number(form.pct_sales) || 0,
     };
     let err;
     if (isEdit && project) {
@@ -214,6 +229,34 @@ export default function AddProjectModal({ project, onSaved, trigger = 'add' }: P
               <div>
                 <label className={labelCls}>Cover URL</label>
                 <input value={form.cover_url} onChange={(e) => setForm({ ...form, cover_url: e.target.value })} className={inputCls} placeholder="https://…" />
+              </div>
+
+              {/* Phase % data entry — 5 buckets */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="text-[10px] text-slate-500 uppercase font-semibold mb-2">Phase % (nhập trực tiếp)</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelCls}>Pháp lý %</label>
+                    <input type="number" min={0} max={100} value={form.pct_legal} onChange={(e) => setForm({ ...form, pct_legal: Number(e.target.value) || 0 })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Thiết kế %</label>
+                    <input type="number" min={0} max={100} value={form.pct_design} onChange={(e) => setForm({ ...form, pct_design: Number(e.target.value) || 0 })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Cung ứng-Đấu thầu %</label>
+                    <input type="number" min={0} max={100} value={form.pct_procurement} onChange={(e) => setForm({ ...form, pct_procurement: Number(e.target.value) || 0 })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Thi công %</label>
+                    <input type="number" min={0} max={100} value={form.pct_construction} onChange={(e) => setForm({ ...form, pct_construction: Number(e.target.value) || 0 })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Sales & marketing %</label>
+                    <input type="number" min={0} max={100} value={form.pct_sales} onChange={(e) => setForm({ ...form, pct_sales: Number(e.target.value) || 0 })} className={inputCls} />
+                  </div>
+                </div>
+                <p className="text-[9px] text-slate-400 mt-1">Để 0 nếu muốn tự tính từ tasks (phase Legal/Design/Procurement/Construction/Sales).</p>
               </div>
             </div>
 

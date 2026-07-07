@@ -20,6 +20,11 @@ export type Project = {
   target_end: string | null;
   pm: string | null;
   cover_url: string | null;
+  pct_legal: number | null;
+  pct_design: number | null;
+  pct_procurement: number | null;
+  pct_construction: number | null;
+  pct_sales: number | null;
   created_at?: string;
 };
 

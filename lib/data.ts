@@ -3,10 +3,10 @@ import { Project, Task, Milestone, DocumentRow, Material } from './supabase';
 // ===== Demo data (fallback when no Supabase key) =====
 
 export const demoProjects: Project[] = [
-  { id: '1', name: 'Le Meridien Fit-out', location: 'HCMC', status: 'In Progress', progress_pct: 35, budget: 5e9, spent: 1.75e9, start_date: '2026-06-01', target_end: '2026-12-31', pm: 'Mr Phán', cover_url: null },
-  { id: '2', name: 'Riverbank Place Office', location: 'HCMC', status: 'On Hold', progress_pct: 60, budget: 3e9, spent: 1.8e9, start_date: '2026-03-01', target_end: '2026-09-30', pm: 'Mr Phán', cover_url: null },
-  { id: '3', name: 'Barson Lounge', location: 'Hanoi', status: 'Complete', progress_pct: 100, budget: 1.2e9, spent: 1.1e9, start_date: '2026-01-01', target_end: '2026-05-15', pm: 'Mr Phán', cover_url: null },
-  { id: '4', name: 'AKUNA Beach Club', location: 'Da Nang', status: 'Not Started', progress_pct: 0, budget: 8e9, spent: 0, start_date: '2026-08-01', target_end: '2027-03-31', pm: 'Mr Phán', cover_url: null },
+  { id: '1', name: 'Le Meridien Fit-out', location: 'HCMC', status: 'In Progress', progress_pct: 35, budget: 5e9, spent: 1.75e9, start_date: '2026-06-01', target_end: '2026-12-31', pm: 'Mr Phán', cover_url: null, pct_legal: 80, pct_design: 95, pct_procurement: 45, pct_construction: 35, pct_sales: 10 },
+  { id: '2', name: 'Riverbank Place Office', location: 'HCMC', status: 'On Hold', progress_pct: 60, budget: 3e9, spent: 1.8e9, start_date: '2026-03-01', target_end: '2026-09-30', pm: 'Mr Phán', cover_url: null, pct_legal: 100, pct_design: 100, pct_procurement: 80, pct_construction: 50, pct_sales: 25 },
+  { id: '3', name: 'Barson Lounge', location: 'Hanoi', status: 'Complete', progress_pct: 100, budget: 1.2e9, spent: 1.1e9, start_date: '2026-01-01', target_end: '2026-05-15', pm: 'Mr Phán', cover_url: null, pct_legal: 100, pct_design: 100, pct_procurement: 100, pct_construction: 100, pct_sales: 100 },
+  { id: '4', name: 'AKUNA Beach Club', location: 'Da Nang', status: 'Not Started', progress_pct: 0, budget: 8e9, spent: 0, start_date: '2026-08-01', target_end: '2027-03-31', pm: 'Mr Phán', cover_url: null, pct_legal: 0, pct_design: 0, pct_procurement: 0, pct_construction: 0, pct_sales: 0 },
 ];
 
 export const demoTasks: Task[] = [

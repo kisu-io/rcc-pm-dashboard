@@ -1,5 +1,6 @@
 import { getProjects, getTasks, getMilestones, getCostEntries, getMaterials, getDocuments } from '@/lib/data-server';
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
+import { phaseBreakdown, PHASE_ORDER, PHASE_COLORS, PHASE_LABELS_VN } from '@/lib/phase';
 import KpiCard from '@/components/KpiCard';
 import StatusChart from '@/components/StatusChart';
 import ProgressChart from '@/components/ProgressChart';
@@ -22,53 +23,6 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const PRIO_COLOR: Record<string, string> = { High: '#ef4444', Medium: '#f59e0b', Low: '#22c55e' };
-
-// Map task phase string → one of 5 phase buckets for the Project Summary breakdown.
-// Buckets correspond to the 7 Project Summary fields requested:
-//   1. Budget (from project.budget/spent) — not a phase
-//   2. Pháp lý (Legal)
-//   3. Thiết kế (Design)
-//   4. Cung ứng-Đấu thầu (Procurement / Tender)
-//   5. Thi công (Construction)
-//   6. Sales & marketing (Sales)
-//   7. Tiến độ tổng (Overall %) — from project.progress_pct
-const PHASE_BUCKETS = ['legal', 'design', 'procurement', 'construction', 'sales'] as const;
-type PhaseBucket = typeof PHASE_BUCKETS[number];
-
-const PHASE_LABELS_VN: Record<PhaseBucket, string> = {
-  legal: 'Pháp lý',
-  design: 'Thiết kế',
-  procurement: 'Cung ứng-Đấu thầu',
-  construction: 'Thi công',
-  sales: 'Sales & marketing',
-};
-
-function classifyPhase(phase: string | null): PhaseBucket | null {
-  if (!phase) return null;
-  const p = phase.toLowerCase().trim();
-  if (['legal', 'permit', 'pháp lý', 'phap ly', 'giấy phép', 'giay phep', 'phaply'].some((s) => p.includes(s))) return 'legal';
-  if (['design', 'thiết kế', 'thiet ke', 'thietke'].some((s) => p.includes(s))) return 'design';
-  if (['procurement', 'tender', 'cung ứng', 'cung ung', 'đấu thầu', 'dau thau', 'materials', 'mua hàng', 'mua hang'].some((s) => p.includes(s))) return 'procurement';
-  if (['sales', 'marketing'].some((s) => p.includes(s))) return 'sales';
-  // Default: Construction covers Construction / MEP / Inspection / Fit-out / thi công
-  return 'construction';
-}
-
-/** Compute % per phase bucket from a list of tasks. Returns 0..100 per bucket. */
-function phaseBreakdown(projectTasks: { phase: string | null; progress_pct: number }[]): Record<PhaseBucket, number> {
-  const out: Record<PhaseBucket, number> = { legal: 0, design: 0, procurement: 0, construction: 0, sales: 0 };
-  const groups: Record<PhaseBucket, number[]> = { legal: [], design: [], procurement: [], construction: [], sales: [] };
-  for (const t of projectTasks) {
-    const bucket = classifyPhase(t.phase);
-    if (!bucket) continue;
-    groups[bucket].push(t.progress_pct);
-  }
-  for (const b of PHASE_BUCKETS) {
-    const arr = groups[b];
-    out[b] = arr.length ? Math.round(arr.reduce((s, x) => s + x, 0) / arr.length) : 0;
-  }
-  return out;
-}
 
 function daysFromNowFn(d: string | null) {
   if (!d) return Infinity;
@@ -258,11 +212,7 @@ export default async function Dashboard() {
               const healthColor = overBudget ? '#ef4444' : budgetPct > 80 ? '#f59e0b' : '#22c55e';
               const scheduleStatus = p.status === 'Complete' ? 'complete' : daysLeft < 0 ? 'delayed' : daysLeft <= 14 ? 'at risk' : 'on track';
               const scheduleColor = scheduleStatus === 'complete' ? 'text-green-600' : scheduleStatus === 'delayed' ? 'text-red-600' : scheduleStatus === 'at risk' ? 'text-amber-600' : 'text-slate-500';
-              const phases = phaseBreakdown(projectTasks);
-              const phaseOrder: PhaseBucket[] = ['legal', 'design', 'procurement', 'construction', 'sales'];
-              const phaseColors: Record<PhaseBucket, string> = {
-                legal: '#a855f7', design: '#06b6d4', procurement: '#f59e0b', construction: '#2563eb', sales: '#ec4899',
-              };
+              const phases = phaseBreakdown(p, projectTasks);
 
               return (
                 <Link key={p.id} href={`/projects/${p.id}`} className="block border border-slate-100 rounded-lg p-3 hover:border-blue-200 hover:bg-blue-50/30 transition">
@@ -289,12 +239,12 @@ export default async function Dashboard() {
                       <div className="text-[9px] text-slate-400">{budgetPct}% used</div>
                     </div>
                     {/* 2–6. Phase buckets */}
-                    {phaseOrder.map((b) => (
+                    {PHASE_ORDER.map((b) => (
                       <div key={b}>
                         <div className="text-[9px] text-slate-400 uppercase">{PHASE_LABELS_VN[b]}</div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full" style={{ width: `${phases[b]}%`, background: phaseColors[b] }} />
+                            <div className="h-full" style={{ width: `${phases[b]}%`, background: PHASE_COLORS[b] }} />
                           </div>
                           <span className="text-[10px] font-medium">{phases[b]}%</span>
                         </div>
