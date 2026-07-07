@@ -23,6 +23,53 @@ const STATUS_BADGE: Record<string, string> = {
 
 const PRIO_COLOR: Record<string, string> = { High: '#ef4444', Medium: '#f59e0b', Low: '#22c55e' };
 
+// Map task phase string → one of 5 phase buckets for the Project Summary breakdown.
+// Buckets correspond to the 7 Project Summary fields requested:
+//   1. Budget (from project.budget/spent) — not a phase
+//   2. Pháp lý (Legal)
+//   3. Thiết kế (Design)
+//   4. Cung ứng-Đấu thầu (Procurement / Tender)
+//   5. Thi công (Construction)
+//   6. Sales & marketing (Sales)
+//   7. Tiến độ tổng (Overall %) — from project.progress_pct
+const PHASE_BUCKETS = ['legal', 'design', 'procurement', 'construction', 'sales'] as const;
+type PhaseBucket = typeof PHASE_BUCKETS[number];
+
+const PHASE_LABELS_VN: Record<PhaseBucket, string> = {
+  legal: 'Pháp lý',
+  design: 'Thiết kế',
+  procurement: 'Cung ứng-Đấu thầu',
+  construction: 'Thi công',
+  sales: 'Sales & marketing',
+};
+
+function classifyPhase(phase: string | null): PhaseBucket | null {
+  if (!phase) return null;
+  const p = phase.toLowerCase().trim();
+  if (['legal', 'permit', 'pháp lý', 'phap ly', 'giấy phép', 'giay phep', 'phaply'].some((s) => p.includes(s))) return 'legal';
+  if (['design', 'thiết kế', 'thiet ke', 'thietke'].some((s) => p.includes(s))) return 'design';
+  if (['procurement', 'tender', 'cung ứng', 'cung ung', 'đấu thầu', 'dau thau', 'materials', 'mua hàng', 'mua hang'].some((s) => p.includes(s))) return 'procurement';
+  if (['sales', 'marketing'].some((s) => p.includes(s))) return 'sales';
+  // Default: Construction covers Construction / MEP / Inspection / Fit-out / thi công
+  return 'construction';
+}
+
+/** Compute % per phase bucket from a list of tasks. Returns 0..100 per bucket. */
+function phaseBreakdown(projectTasks: { phase: string | null; progress_pct: number }[]): Record<PhaseBucket, number> {
+  const out: Record<PhaseBucket, number> = { legal: 0, design: 0, procurement: 0, construction: 0, sales: 0 };
+  const groups: Record<PhaseBucket, number[]> = { legal: [], design: [], procurement: [], construction: [], sales: [] };
+  for (const t of projectTasks) {
+    const bucket = classifyPhase(t.phase);
+    if (!bucket) continue;
+    groups[bucket].push(t.progress_pct);
+  }
+  for (const b of PHASE_BUCKETS) {
+    const arr = groups[b];
+    out[b] = arr.length ? Math.round(arr.reduce((s, x) => s + x, 0) / arr.length) : 0;
+  }
+  return out;
+}
+
 function daysFromNowFn(d: string | null) {
   if (!d) return Infinity;
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
@@ -76,9 +123,9 @@ export default async function Dashboard() {
     .filter((m) => m.status === 'Pending' && m.due_date && daysFromNowFn(m.due_date) <= 30 && daysFromNowFn(m.due_date) >= -7)
     .sort((a, b) => daysFromNowFn(a.due_date) - daysFromNowFn(b.due_date));
 
-  // Look-ahead (6 weeks)
+  // Look-ahead (2 weeks)
   const lookAhead = tasks
-    .filter((t) => t.kanban_status !== 'Done' && t.due_date && daysFromNowFn(t.due_date) <= 42)
+    .filter((t) => t.kanban_status !== 'Done' && t.due_date && daysFromNowFn(t.due_date) <= 14)
     .sort((a, b) => daysFromNowFn(a.due_date) - daysFromNowFn(b.due_date));
 
   // Constraints / blockers
@@ -115,6 +162,7 @@ export default async function Dashboard() {
   const statusData = ['Not Started', 'In Progress', 'On Hold', 'Complete', 'Pending', 'Upcoming'].map((status) => ({
     status,
     count: projects.filter((p) => p.status === status).length,
+    projects: projects.filter((p) => p.status === status).map((p) => p.name),
   }));
 
   return (
@@ -185,7 +233,7 @@ export default async function Dashboard() {
 
       {/* ===== CHARTS ROW ===== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ProgressChart />
+        <ProgressChart projects={projects} tasks={tasks} />
         <StatusChart data={statusData} />
       </div>
 
@@ -210,6 +258,11 @@ export default async function Dashboard() {
               const healthColor = overBudget ? '#ef4444' : budgetPct > 80 ? '#f59e0b' : '#22c55e';
               const scheduleStatus = p.status === 'Complete' ? 'complete' : daysLeft < 0 ? 'delayed' : daysLeft <= 14 ? 'at risk' : 'on track';
               const scheduleColor = scheduleStatus === 'complete' ? 'text-green-600' : scheduleStatus === 'delayed' ? 'text-red-600' : scheduleStatus === 'at risk' ? 'text-amber-600' : 'text-slate-500';
+              const phases = phaseBreakdown(projectTasks);
+              const phaseOrder: PhaseBucket[] = ['legal', 'design', 'procurement', 'construction', 'sales'];
+              const phaseColors: Record<PhaseBucket, string> = {
+                legal: '#a855f7', design: '#06b6d4', procurement: '#f59e0b', construction: '#2563eb', sales: '#ec4899',
+              };
 
               return (
                 <Link key={p.id} href={`/projects/${p.id}`} className="block border border-slate-100 rounded-lg p-3 hover:border-blue-200 hover:bg-blue-50/30 transition">
@@ -225,32 +278,40 @@ export default async function Dashboard() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    {/* Progress */}
+                  {/* 7-field summary grid: Budget | 5 phases | Overall % */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    {/* 1. Budget */}
                     <div>
-                      <div className="text-[9px] text-slate-400 uppercase">Progress</div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#2563eb]" style={{ width: `${p.progress_pct}%` }} />
-                        </div>
-                        <span className="text-[10px] font-medium">{p.progress_pct}%</span>
-                      </div>
-                    </div>
-                    {/* Budget */}
-                    <div>
-                      <div className="text-[9px] text-slate-400 uppercase">Budget</div>
+                      <div className="text-[9px] text-slate-400 uppercase">Ngân sách</div>
                       <div className="text-[10px] mt-0.5" style={{ color: healthColor }}>
                         {formatVND(p.spent)} / {formatVND(p.budget)}
                       </div>
                       <div className="text-[9px] text-slate-400">{budgetPct}% used</div>
                     </div>
-                    {/* Schedule */}
-                    <div>
-                      <div className="text-[9px] text-slate-400 uppercase">Schedule</div>
-                      <div className={`text-[10px] mt-0.5 font-medium ${scheduleColor}`}>
-                        {p.status === 'Complete' ? 'Done' : daysLeft === Infinity ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
+                    {/* 2–6. Phase buckets */}
+                    {phaseOrder.map((b) => (
+                      <div key={b}>
+                        <div className="text-[9px] text-slate-400 uppercase">{PHASE_LABELS_VN[b]}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full" style={{ width: `${phases[b]}%`, background: phaseColors[b] }} />
+                          </div>
+                          <span className="text-[10px] font-medium">{phases[b]}%</span>
+                        </div>
                       </div>
-                      <div className="text-[9px] text-slate-400">{projOpen} open · {projOverdue} overdue</div>
+                    ))}
+                    {/* 7. Overall progress + schedule summary */}
+                    <div>
+                      <div className="text-[9px] text-slate-400 uppercase">Tiến độ tổng</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#22c55e]" style={{ width: `${p.progress_pct}%` }} />
+                        </div>
+                        <span className="text-[10px] font-medium">{p.progress_pct}%</span>
+                      </div>
+                      <div className={`text-[9px] mt-0.5 ${scheduleColor}`}>
+                        {p.status === 'Complete' ? 'Done' : daysLeft === Infinity ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`} · {projOpen} open · {projOverdue} overdue
+                      </div>
                     </div>
                   </div>
                 </Link>
@@ -286,11 +347,11 @@ export default async function Dashboard() {
             )}
           </div>
 
-          {/* 6-Week Look-ahead */}
+          {/* 2-Week Look-ahead */}
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2"><Clock size={16} /> 6-Week Look-ahead</h3>
+            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2"><Clock size={16} /> 2-Week Look-ahead</h3>
             {lookAhead.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4 text-center">No tasks due in 6 weeks</p>
+              <p className="text-xs text-slate-400 py-4 text-center">No tasks due in 2 weeks</p>
             ) : (
               <div className="space-y-2">
                 {lookAhead.slice(0, 6).map((t) => {

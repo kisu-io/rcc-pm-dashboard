@@ -1,22 +1,148 @@
 'use client';
+import { useMemo, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
-// S-curve: Planned vs Actual cumulative completion
-const data = [
-  { week: 'W1', planned: 5, actual: 4 },
-  { week: 'W2', planned: 12, actual: 10 },
-  { week: 'W3', planned: 22, actual: 18 },
-  { week: 'W4', planned: 35, actual: 30 },
-  { week: 'W5', planned: 50, actual: 42 },
-  { week: 'W6', planned: 65, actual: 55 },
-];
+export type ProgressProject = {
+  id: string;
+  name: string;
+  progress_pct: number;
+  start_date: string | null;
+  target_end: string | null;
+}
 
-export default function ProgressChart() {
+export type ProgressTask = {
+  id: string;
+  project_id: string;
+  planned_start: string | null;
+  planned_end: string | null;
+  actual_start: string | null;
+  actual_end: string | null;
+  progress_pct: number;
+}
+
+type Props = {
+  projects: ProgressProject[];
+  tasks: ProgressTask[];
+};
+
+const WEEK_MS = 7 * 86400000;
+
+function weekLabel(d: Date) {
+  return `W${Math.floor((d.getTime() - Date.UTC(d.getFullYear(), 0, 1)) / WEEK_MS) + 1}`;
+}
+
+function parseDate(s: string | null): Date | null {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function cumulativeSeries(
+  project: ProgressProject | null,
+  tasks: ProgressTask[],
+  kind: 'planned' | 'actual',
+  buckets: { label: string; date: Date }[],
+) {
+  // For each bucket, compute cumulative completion percentage.
+  // Strategy: weigh each task by its share of the project's total effort.
+  // A task contributes progress_pct when it's finished (end <= bucket date),
+  // partial progress when in progress (start <= bucket < end), 0 otherwise.
+  const projTasks = project
+    ? tasks.filter((t) => t.project_id === project.id)
+    : tasks;
+  if (!projTasks.length) return buckets.map(() => 0);
+
+  // Compute total effort (duration in ms) across all tasks for weighting
+  const taskDurs = projTasks.map((t) => {
+    const s = kind === 'planned' ? parseDate(t.planned_start) : (parseDate(t.actual_start) || parseDate(t.planned_start));
+    const e = kind === 'planned' ? parseDate(t.planned_end) : (parseDate(t.actual_end) || parseDate(t.planned_end));
+    if (!s || !e) return WEEK_MS;
+    return Math.max(e.getTime() - s.getTime(), WEEK_MS);
+  });
+  const totalEffort = taskDurs.reduce((s, d) => s + d, 0) || projTasks.length * WEEK_MS;
+
+  return buckets.map((b) => {
+    let cumWeighted = 0;
+    projTasks.forEach((t) => {
+      const start = kind === 'planned' ? parseDate(t.planned_start) : (parseDate(t.actual_start) || parseDate(t.planned_start));
+      const end = kind === 'planned' ? parseDate(t.planned_end) : (parseDate(t.actual_end) || parseDate(t.planned_end));
+      if (!start || !end) return;
+      const dur = Math.max(end.getTime() - start.getTime(), WEEK_MS);
+      const weight = dur / totalEffort;
+      if (b.date.getTime() >= end.getTime()) {
+        cumWeighted += weight * t.progress_pct;
+      } else if (b.date.getTime() >= start.getTime()) {
+        const frac = (b.date.getTime() - start.getTime()) / dur;
+        cumWeighted += weight * Math.min(frac * 100, t.progress_pct);
+      }
+    });
+    return cumWeighted;
+  });
+}
+
+export default function ProgressChart({ projects, tasks }: Props) {
+  const [selected, setSelected] = useState<string>('all');
+
+  const { data, chartTitle } = useMemo(() => {
+    const project = selected === 'all' ? null : projects.find((p) => p.id === selected) || null;
+
+    // Determine time range
+    const projTasks = project ? tasks.filter((t) => t.project_id === project.id) : tasks;
+    const startDates: Date[] = [];
+    const endDates: Date[] = [];
+    if (project) {
+      if (project.start_date) startDates.push(new Date(project.start_date));
+      if (project.target_end) endDates.push(new Date(project.target_end));
+    }
+    for (const t of projTasks) {
+      const ps = parseDate(t.planned_start);
+      const pe = parseDate(t.planned_end);
+      if (ps) startDates.push(ps);
+      if (pe) endDates.push(pe);
+    }
+    const minDate = startDates.length ? new Date(Math.min(...startDates.map((d) => d.getTime()))) : new Date();
+    const maxDate = endDates.length ? new Date(Math.max(...endDates.map((d) => d.getTime()))) : new Date(minDate.getTime() + 6 * WEEK_MS);
+    const totalWeeks = Math.max(Math.ceil((maxDate.getTime() - minDate.getTime()) / WEEK_MS), 1);
+    const weekCount = Math.min(Math.max(totalWeeks, 4), 12);
+
+    const buckets: { label: string; date: Date }[] = [];
+    for (let i = 0; i < weekCount; i++) {
+      const d = new Date(minDate.getTime() + i * WEEK_MS);
+      buckets.push({ label: weekLabel(d), date: d });
+    }
+
+    const planned = cumulativeSeries(project, projTasks, 'planned', buckets);
+    const actual = cumulativeSeries(project, projTasks, 'actual', buckets);
+    const merged = buckets.map((b, i) => ({
+      week: b.label,
+      planned: Math.round(planned[i]),
+      actual: Math.round(actual[i]),
+    }));
+
+    return {
+      data: merged,
+      chartTitle: project ? `Project Progress — ${project.name}` : 'Project Progress (S-curve) — All Projects',
+    };
+  }, [selected, projects, tasks]);
+
+  const options = [{ id: 'all', name: 'All Projects' }, ...projects];
+
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm">
-      <h3 className="font-semibold mb-3 text-sm">Project Progress (S-curve)</h3>
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <h3 className="font-semibold text-sm truncate">{chartTitle}</h3>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:border-blue-400"
+        >
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </select>
+      </div>
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 8 }}>
           <defs>
