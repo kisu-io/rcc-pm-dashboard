@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, getTasks, getMilestones, getDocuments } from '@/lib/data-server';
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
-import { phaseBreakdown, PHASE_ORDER, PHASE_COLORS, PHASE_LABELS_VN } from '@/lib/phase';
+import { phaseBreakdown, PHASE_ORDER, PHASE_COLORS, PHASE_LABELS_VN, effectiveProgress } from '@/lib/phase';
 import EditProjectButton from '@/components/EditProjectButton';
 import EditGuard from '@/components/EditGuard';
 import MilestonesList from '@/components/MilestonesList';
@@ -43,6 +43,7 @@ export default async function ProjectDetail({ params }: { params: { id: string }
   const budgetPct = project.budget ? Math.round((project.spent / project.budget) * 100) : 0;
   const overBudget = project.budget != null && project.spent > project.budget;
   const healthColor = overBudget ? '#ef4444' : budgetPct > 80 ? '#f59e0b' : '#22c55e';
+  const effPct = effectiveProgress(project, tasks);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -90,9 +91,12 @@ export default async function ProjectDetail({ params }: { params: { id: string }
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
         <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
           <div className="text-[10px] text-slate-400 uppercase">Progress</div>
-          <div className="text-xl md:text-2xl font-bold">{project.progress_pct}%</div>
+          <div className="text-xl md:text-2xl font-bold">{effPct}%</div>
           <div className="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#2563eb]" style={{ width: `${project.progress_pct}%` }} />
+            <div className="h-full bg-[#2563eb]" style={{ width: `${effPct}%` }} />
+          </div>
+          <div className="text-[9px] text-slate-400 mt-1">
+            {project.progress_pct != null && project.progress_pct > 0 ? 'PM override' : `${done}/${tasks.length} tasks done`}
           </div>
         </div>
         <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
@@ -158,9 +162,12 @@ export default async function ProjectDetail({ params }: { params: { id: string }
             <div className="text-[9px] text-slate-400 uppercase">Tiến độ tổng</div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#22c55e]" style={{ width: `${project.progress_pct}%` }} />
+                <div className="h-full bg-[#22c55e]" style={{ width: `${effPct}%` }} />
               </div>
-              <span className="text-[10px] font-medium">{project.progress_pct}%</span>
+              <span className="text-[10px] font-medium">{effPct}%</span>
+            </div>
+            <div className="text-[9px] text-slate-400 mt-0.5">
+              {project.progress_pct != null && project.progress_pct > 0 ? 'PM override' : `Auto: ${done}/${tasks.length} tasks`}
             </div>
           </div>
         </div>

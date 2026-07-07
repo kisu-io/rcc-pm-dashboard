@@ -16,6 +16,21 @@ export const PHASE_COLORS: Record<PhaseBucket, string> = {
   legal: '#a855f7', design: '#06b6d4', procurement: '#f59e0b', construction: '#2563eb', sales: '#ec4899',
 };
 
+/** Effective overall progress for a project.
+ *  Hybrid: if project.progress_pct > 0 (PM entered manually), use it.
+ *  Otherwise auto-calc = Done tasks / total tasks * 100.
+ *  Returns 0..100. */
+export function effectiveProgress(
+  project: { progress_pct?: number | null },
+  tasks: { kanban_status?: string | null }[],
+): number {
+  const stored = project?.progress_pct;
+  if (stored != null && stored > 0) return Math.round(stored);
+  if (!tasks.length) return 0;
+  const done = tasks.filter((t) => t.kanban_status === 'Done').length;
+  return Math.round((done / tasks.length) * 100);
+}
+
 /** Map a task.phase string to one of 5 phase buckets. Returns null only when phase is null/empty. */
 export function classifyPhase(phase: string | null): PhaseBucket | null {
   if (!phase) return null;

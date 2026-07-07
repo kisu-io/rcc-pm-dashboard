@@ -1,6 +1,6 @@
 import { getProjects, getTasks, getMilestones, getCostEntries, getMaterials, getDocuments } from '@/lib/data-server';
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
-import { phaseBreakdown, PHASE_ORDER, PHASE_COLORS, PHASE_LABELS_VN } from '@/lib/phase';
+import { phaseBreakdown, PHASE_ORDER, PHASE_COLORS, PHASE_LABELS_VN, effectiveProgress } from '@/lib/phase';
 import KpiCard from '@/components/KpiCard';
 import StatusChart from '@/components/StatusChart';
 import ProgressChart from '@/components/ProgressChart';
@@ -64,7 +64,10 @@ export default async function Dashboard() {
   const utilPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
   // Schedule health
-  const avgProgress = total ? Math.round(projects.reduce((s, p) => s + p.progress_pct, 0) / total) : 0;
+  const avgProgress = total ? Math.round(projects.reduce((s, p) => {
+    const ptasks = tasks.filter((t) => t.project_id === p.id);
+    return s + effectiveProgress(p, ptasks);
+  }, 0) / total) : 0;
   const overdueTasks = tasks.filter(isOverdue);
   const onTimeProjects = projects.filter((p) => {
     if (!p.target_end) return true;
@@ -213,6 +216,7 @@ export default async function Dashboard() {
               const scheduleStatus = p.status === 'Complete' ? 'complete' : daysLeft < 0 ? 'delayed' : daysLeft <= 14 ? 'at risk' : 'on track';
               const scheduleColor = scheduleStatus === 'complete' ? 'text-green-600' : scheduleStatus === 'delayed' ? 'text-red-600' : scheduleStatus === 'at risk' ? 'text-amber-600' : 'text-slate-500';
               const phases = phaseBreakdown(p, projectTasks);
+              const effPct = effectiveProgress(p, projectTasks);
 
               return (
                 <Link key={p.id} href={`/projects/${p.id}`} className="block border border-slate-100 rounded-lg p-3 hover:border-blue-200 hover:bg-blue-50/30 transition">
@@ -255,9 +259,9 @@ export default async function Dashboard() {
                       <div className="text-[9px] text-slate-400 uppercase">Tiến độ tổng</div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#22c55e]" style={{ width: `${p.progress_pct}%` }} />
+                          <div className="h-full bg-[#22c55e]" style={{ width: `${effPct}%` }} />
                         </div>
-                        <span className="text-[10px] font-medium">{p.progress_pct}%</span>
+                        <span className="text-[10px] font-medium">{effPct}%</span>
                       </div>
                       <div className={`text-[9px] mt-0.5 ${scheduleColor}`}>
                         {p.status === 'Complete' ? 'Done' : daysLeft === Infinity ? '—' : daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`} · {projOpen} open · {projOverdue} overdue
