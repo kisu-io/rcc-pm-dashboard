@@ -12,9 +12,11 @@ const STATUS_BADGE: Record<string, string> = {
   'Upcoming': 'bg-cyan-100 text-cyan-700',
 };
 
-export default function ProjectCard({ project }: { project: Project }) {
+export default function ProjectCard({ project, effProgress }: { project: Project; effProgress?: number }) {
   const due = daysFromNow(project.target_end);
   const budgetUtil = project.budget ? Math.round((project.spent / project.budget) * 100) : 0;
+  // If effProgress provided (from server), use it; else fall back to stored progress_pct
+  const effPct = effProgress != null ? effProgress : (project.progress_pct || 0);
 
   return (
     <Link
@@ -44,10 +46,10 @@ export default function ProjectCard({ project }: { project: Project }) {
         <div>
           <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
             <span>Progress</span>
-            <span className="font-semibold text-slate-600">{project.progress_pct}%</span>
+            <span className="font-semibold text-slate-600">{effPct}%</span>
           </div>
           <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#2563eb]" style={{ width: `${project.progress_pct}%` }} />
+            <div className="h-full bg-[#2563eb]" style={{ width: `${effPct}%` }} />
           </div>
         </div>
 

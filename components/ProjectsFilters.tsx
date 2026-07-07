@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { Project } from '@/lib/supabase';
 import ProjectCard from './ProjectCard';
 
-type ProjectWithTasks = Project & { task_count: number };
+type ProjectWithTasks = Project & { task_count: number; eff_progress: number };
 
 type SortKey = 'progress' | 'deadline' | 'name' | 'budget';
 
@@ -31,7 +31,7 @@ export default function ProjectsFilters({
       arr = arr.filter((p) => p.name.toLowerCase().includes(s) || (p.location || '').toLowerCase().includes(s));
     }
     arr.sort((a, b) => {
-      if (sort === 'progress') return b.progress_pct - a.progress_pct;
+      if (sort === 'progress') return b.eff_progress - a.eff_progress;
       if (sort === 'name') return a.name.localeCompare(b.name);
       if (sort === 'budget') return (b.budget || 0) - (a.budget || 0);
       // deadline asc (nulls last)
@@ -79,7 +79,7 @@ export default function ProjectsFilters({
       {/* Grid */}
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
-          {filtered.map((p) => <ProjectCard key={p.id} project={p} />)}
+          {filtered.map((p) => <ProjectCard key={p.id} project={p} effProgress={p.eff_progress} />)}
         </div>
       ) : (
         <div className="bg-white rounded-xl p-10 text-center text-slate-400 shadow-sm">

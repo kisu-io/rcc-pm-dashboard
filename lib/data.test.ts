@@ -88,22 +88,22 @@ describe('isLookAhead', () => {
     expect(isLookAhead(t)).toBe(false);
   });
 
-  it('true for non-Done tasks due within 42 days', () => {
-    const t: Task = makeTask({ due_date: '2026-08-01', kanban_status: 'To Do' });
+  it('true for non-Done tasks due within 14 days', () => {
+    const t: Task = makeTask({ due_date: '2026-07-10', kanban_status: 'To Do' });
     expect(isLookAhead(t)).toBe(true);
   });
 
-  it('false for non-Done tasks due > 42 days out', () => {
-    const t: Task = makeTask({ due_date: '2026-09-30', kanban_status: 'To Do' });
+  it('false for non-Done tasks due > 14 days out', () => {
+    const t: Task = makeTask({ due_date: '2026-08-15', kanban_status: 'To Do' });
     expect(isLookAhead(t)).toBe(false);
   });
 
-  it('true for overdue tasks (daysFromNow negative, ≤ 42)', () => {
+  it('true for overdue tasks (daysFromNow negative, ≤ 14)', () => {
     const t: Task = makeTask({ due_date: '2026-06-30', kanban_status: 'In Progress' });
     expect(isLookAhead(t)).toBe(true);
   });
 
-  it('true for null due_date (Infinity is not ≤ 42, so should be FALSE)', () => {
+  it('true for null due_date (Infinity is not ≤ 14, so should be FALSE)', () => {
     const t: Task = makeTask({ due_date: null, kanban_status: 'To Do' });
     expect(isLookAhead(t)).toBe(false);
   });

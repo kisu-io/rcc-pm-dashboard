@@ -1,4 +1,5 @@
 import { getProjects, getTasks } from '@/lib/data-server';
+import { effectiveProgress } from '@/lib/phase';
 import ProjectCard from '@/components/ProjectCard';
 import ProjectsFilters from '@/components/ProjectsFilters';
 import AddProjectButton from '@/components/AddProjectButton';
@@ -16,16 +17,20 @@ export default async function ProjectsPage() {
   const onHold = projects.filter((p) => p.status === 'On Hold').length;
   const complete = projects.filter((p) => p.status === 'Complete').length;
 
-  // Build task count map
+  // Build task count map + per-project tasks for effective progress
   const taskCount: Record<string, number> = {};
+  const tasksByProject: Record<string, typeof tasks> = {};
   for (const t of tasks) {
     taskCount[t.project_id] = (taskCount[t.project_id] || 0) + 1;
+    if (!tasksByProject[t.project_id]) tasksByProject[t.project_id] = [];
+    tasksByProject[t.project_id].push(t);
   }
 
   // Pass serializable data to client filter component
   const projectsWithTasks = projects.map((p) => ({
     ...p,
     task_count: taskCount[p.id] || 0,
+    eff_progress: effectiveProgress(p, tasksByProject[p.id] || []),
   }));
 
   const statuses = Array.from(new Set(projects.map((p) => p.status)));

@@ -73,7 +73,7 @@ export function isOverdue(t: Task): boolean {
 }
 
 export function isLookAhead(t: Task): boolean {
-  return t.kanban_status !== 'Done' && daysFromNow(t.due_date) <= 42;
+  return t.kanban_status !== 'Done' && daysFromNow(t.due_date) <= 14;
 }
 
 // SPI (Schedule Performance Index) — earned/planned
