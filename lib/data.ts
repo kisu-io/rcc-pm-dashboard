@@ -1,19 +1,50 @@
 import { Project, Task, Milestone, DocumentRow, Material } from './supabase';
 
-// ===== Demo data (fallback when no Supabase key) =====
+// ===== Demo data (single sample project with all attributes populated) =====
 
 export const demoProjects: Project[] = [
-  { id: '1', name: 'Le Meridien Fit-out', location: 'HCMC', status: 'In Progress', progress_pct: 35, budget: 5e9, spent: 1.75e9, start_date: '2026-06-01', target_end: '2026-12-31', pm: 'Mr Phán', cover_url: null, pct_legal: 80, pct_design: 95, pct_procurement: 45, pct_construction: 35, pct_sales: 10 },
-  { id: '2', name: 'Riverbank Place Office', location: 'HCMC', status: 'On Hold', progress_pct: 60, budget: 3e9, spent: 1.8e9, start_date: '2026-03-01', target_end: '2026-09-30', pm: 'Mr Phán', cover_url: null, pct_legal: 100, pct_design: 100, pct_procurement: 80, pct_construction: 50, pct_sales: 25 },
-  { id: '3', name: 'Barson Lounge', location: 'Hanoi', status: 'Complete', progress_pct: 100, budget: 1.2e9, spent: 1.1e9, start_date: '2026-01-01', target_end: '2026-05-15', pm: 'Mr Phán', cover_url: null, pct_legal: 100, pct_design: 100, pct_procurement: 100, pct_construction: 100, pct_sales: 100 },
-  { id: '4', name: 'AKUNA Beach Club', location: 'Da Nang', status: 'Not Started', progress_pct: 0, budget: 8e9, spent: 0, start_date: '2026-08-01', target_end: '2027-03-31', pm: 'Mr Phán', cover_url: null, pct_legal: 0, pct_design: 0, pct_procurement: 0, pct_construction: 0, pct_sales: 0 },
+  {
+    id: '1',
+    name: 'Le Meridien Fit-out',
+    location: 'HCMC',
+    status: 'In Progress',
+    progress_pct: 0, // 0 = auto-calc from Done/total tasks
+    budget: 5e9,
+    spent: 1.75e9,
+    start_date: '2026-06-01',
+    target_end: '2026-12-31',
+    pm: 'Mr Phán',
+    cover_url: 'https://images.unsplash.com/photo-1566073771259-6a760f3f6d2b?w=1200',
+    pct_legal: 80,
+    pct_design: 95,
+    pct_procurement: 45,
+    pct_construction: 35,
+    pct_sales: 10,
+  },
 ];
 
 export const demoTasks: Task[] = [
-  { id: 't1', project_id: '1', title: 'Demo & dọn mặt bằng', phase: 'Construction', zone: 'Lobby', owner: 'Đội A', priority: 'High', kanban_status: 'Done', planned_start: '2026-06-01', planned_end: '2026-06-10', actual_start: '2026-06-01', actual_end: '2026-06-09', progress_pct: 100, due_date: '2026-06-10', constraint_note: null, notes: null },
-  { id: 't2', project_id: '1', title: 'MEP rough-in', phase: 'Construction', zone: 'Floor 2', owner: 'Đội B', priority: 'High', kanban_status: 'In Progress', planned_start: '2026-06-11', planned_end: '2026-07-05', actual_start: '2026-06-12', actual_end: null, progress_pct: 45, due_date: '2026-07-05', constraint_note: 'Chờ vật tư ống đồng', notes: null },
-  { id: 't3', project_id: '1', title: 'Drywall partition', phase: 'Construction', zone: 'Floor 2', owner: 'Đội C', priority: 'Medium', kanban_status: 'To Do', planned_start: '2026-07-06', planned_end: '2026-07-20', actual_start: null, actual_end: null, progress_pct: 0, due_date: '2026-07-20', constraint_note: null, notes: null },
-  { id: 't4', project_id: '1', title: 'Nghiệm thu PCCC', phase: 'Inspection', zone: 'All', owner: 'QA', priority: 'High', kanban_status: 'Review', planned_start: '2026-06-20', planned_end: '2026-06-28', actual_start: '2026-06-21', actual_end: null, progress_pct: 80, due_date: '2026-06-28', constraint_note: 'Chờ lịch cơ quan PCCC', notes: null },
+  // Pháp lý (Legal)
+  { id: 't1', project_id: '1', title: 'Xin giấy phép xây dựng', phase: 'Legal', zone: 'All', owner: 'Phòng pháp chế', priority: 'High', kanban_status: 'Done', planned_start: '2026-06-01', planned_end: '2026-06-15', actual_start: '2026-06-01', actual_end: '2026-06-14', progress_pct: 100, due_date: '2026-06-15', constraint_note: null, notes: 'Đã nhận GPXD số 123/GPXD' },
+  { id: 't2', project_id: '1', title: 'Phê duyệt PCCC', phase: 'Legal', zone: 'All', owner: 'Phòng pháp chế', priority: 'High', kanban_status: 'In Progress', planned_start: '2026-06-16', planned_end: '2026-07-10', actual_start: '2026-06-17', actual_end: null, progress_pct: 60, due_date: '2026-07-10', constraint_note: 'Chờ cơ quan PCCC duyệt hồ sơ', notes: null },
+
+  // Thiết kế (Design)
+  { id: 't3', project_id: '1', title: 'Bản vẽ thi công (Shop drawings)', phase: 'Design', zone: 'All', owner: 'KTS. Nguyễn Văn A', priority: 'High', kanban_status: 'Done', planned_start: '2026-06-01', planned_end: '2026-06-20', actual_start: '2026-06-02', actual_end: '2026-06-19', progress_pct: 100, due_date: '2026-06-20', constraint_note: null, notes: 'Đã ký duyệt' },
+  { id: 't4', project_id: '1', title: 'Mock-up phòng khách sạn', phase: 'Design', zone: 'Floor 12', owner: 'KTS. Nguyễn Văn A', priority: 'Medium', kanban_status: 'Review', planned_start: '2026-06-21', planned_end: '2026-07-05', actual_start: '2026-06-22', actual_end: null, progress_pct: 90, due_date: '2026-07-05', constraint_note: null, notes: 'Chờ chủ đầu tư confirm' },
+
+  // Cung ứng-Đấu thầu (Procurement)
+  { id: 't5', project_id: '1', title: 'Đấu thầu gói MEP', phase: 'Procurement', zone: 'All', owner: 'Phòng mua hàng', priority: 'High', kanban_status: 'Done', planned_start: '2026-06-05', planned_end: '2026-06-25', actual_start: '2026-06-05', actual_end: '2026-06-24', progress_pct: 100, due_date: '2026-06-25', constraint_note: null, notes: 'Trúng thầu: Công ty MEP Việt' },
+  { id: 't6', project_id: '1', title: 'Đặt hàng vật tư nội thất (Furniture)', phase: 'Procurement', zone: 'All', owner: 'Phòng mua hàng', priority: 'Medium', kanban_status: 'In Progress', planned_start: '2026-06-26', planned_end: '2026-08-15', actual_start: '2026-06-28', actual_end: null, progress_pct: 30, due_date: '2026-08-15', constraint_note: 'Lead time 8 tuần từ Ý', notes: null },
+
+  // Thi công (Construction)
+  { id: 't7', project_id: '1', title: 'Demo & dọn mặt bằng', phase: 'Construction', zone: 'Lobby', owner: 'Đội A', priority: 'High', kanban_status: 'Done', planned_start: '2026-06-01', planned_end: '2026-06-10', actual_start: '2026-06-01', actual_end: '2026-06-09', progress_pct: 100, due_date: '2026-06-10', constraint_note: null, notes: null },
+  { id: 't8', project_id: '1', title: 'MEP rough-in', phase: 'Construction', zone: 'Floor 2', owner: 'Đội B', priority: 'High', kanban_status: 'In Progress', planned_start: '2026-06-11', planned_end: '2026-07-05', actual_start: '2026-06-12', actual_end: null, progress_pct: 45, due_date: '2026-07-05', constraint_note: 'Chờ vật tư ống đồng', notes: null },
+  { id: 't9', project_id: '1', title: 'Drywall partition', phase: 'Construction', zone: 'Floor 2', owner: 'Đội C', priority: 'Medium', kanban_status: 'To Do', planned_start: '2026-07-06', planned_end: '2026-07-20', actual_start: null, actual_end: null, progress_pct: 0, due_date: '2026-07-20', constraint_note: null, notes: null },
+  { id: 't10', project_id: '1', title: 'Nghiệm thu PCCC', phase: 'Inspection', zone: 'All', owner: 'QA', priority: 'High', kanban_status: 'Review', planned_start: '2026-06-20', planned_end: '2026-06-28', actual_start: '2026-06-21', actual_end: null, progress_pct: 80, due_date: '2026-06-28', constraint_note: 'Chờ lịch cơ quan PCCC', notes: null },
+
+  // Sales & marketing
+  { id: 't11', project_id: '1', title: 'Booking website & launch campaign', phase: 'Sales', zone: 'All', owner: 'Marketing team', priority: 'Medium', kanban_status: 'To Do', planned_start: '2026-09-01', planned_end: '2026-10-15', actual_start: null, actual_end: null, progress_pct: 0, due_date: '2026-10-15', constraint_note: null, notes: 'Soft launch Q4' },
+  { id: 't12', project_id: '1', title: 'Press release & KOL tour', phase: 'Marketing', zone: 'All', owner: 'Marketing team', priority: 'Low', kanban_status: 'To Do', planned_start: '2026-11-01', planned_end: '2026-12-01', actual_start: null, actual_end: null, progress_pct: 0, due_date: '2026-12-01', constraint_note: null, notes: null },
 ];
 
 export const demoMilestones: Milestone[] = [
