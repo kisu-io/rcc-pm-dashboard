@@ -6,6 +6,12 @@ import {
 } from '@dnd-kit/core';
 import { Task, Project, supabase } from '@/lib/supabase';
 import TaskEditModal from './TaskEditModal';
+import {
+  ScheduleTask, phaseColor, priorityColor, isMilestone, isExpress,
+  formatDate, daysBetween, barColor,
+  MILESTONE_COLOR, EXPRESS_COLOR,
+} from '@/lib/schedule-utils';
+import { Flag, Zap, AlertTriangle, Clock, User, MapPin } from 'lucide-react';
 
 const COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
 const COL_COLOR: Record<string, string> = {
@@ -14,7 +20,6 @@ const COL_COLOR: Record<string, string> = {
   'Review': '#a855f7',
   'Done': '#22c55e',
 };
-const PRIO_COLOR: Record<string, string> = { High: '#ef4444', Medium: '#f59e0b', Low: '#22c55e' };
 
 function Card({ task, projName, projects, onEdit, onSaved }: {
   task: Task;
@@ -25,8 +30,15 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, opacity: isDragging ? 0.5 : 1, touchAction: 'none' as const }
-    : { touchAction: 'none' as const };
+    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, opacity: isDragging ? 0.5 : 1, touchAction: 'none' as const, borderLeft: `4px solid ${phaseColor(task.phase)}` }
+    : { touchAction: 'none' as const, borderLeft: `4px solid ${phaseColor(task.phase)}` };
+
+  const ms = isMilestone(task as ScheduleTask);
+  const ex = isExpress(task as ScheduleTask);
+  const phColor = phaseColor(task.phase);
+  const dur = daysBetween(task.planned_start, task.planned_end);
+  const colColor = COL_COLOR[task.kanban_status] || '#94a3b8';
+  const pColor = priorityColor(task.priority);
 
   return (
     <>
@@ -36,24 +48,79 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
         {...listeners}
         {...attributes}
         onDoubleClick={() => onEdit(task)}
-        className="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing select-none hover:ring-1 hover:ring-blue-500/30 transition"
+        className="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing select-none hover:shadow-md transition group"
         title="Double-click to edit"
       >
+        {/* Top row: phase + priority + badges */}
         <div className="flex items-center justify-between mb-1 gap-2">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 truncate min-w-0">{projName}</span>
-          <span className="text-[10px] font-bold shrink-0" style={{ color: PRIO_COLOR[task.priority] }}>{task.priority}</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span
+              className="text-[9px] px-1.5 py-0.5 rounded-full truncate text-white font-medium"
+              style={{ background: phColor }}
+            >
+              {task.phase || '—'}
+            </span>
+            {ms && (
+              <span className="text-[9px] px-1 py-0.5 rounded-full text-white font-bold flex items-center gap-0.5" style={{ background: MILESTONE_COLOR }}>
+                <Flag size={8} /> MS
+              </span>
+            )}
+            {ex && !ms && (
+              <span className="text-[9px] px-1 py-0.5 rounded-full text-white font-bold flex items-center gap-0.5" style={{ background: EXPRESS_COLOR }}>
+                <Zap size={8} /> EX
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-bold shrink-0" style={{ color: pColor }}>{task.priority}</span>
         </div>
-        <div className="text-sm font-medium break-words">{task.title}</div>
-        <div className="text-xs text-slate-400 mt-1 break-words">{task.owner} · {task.zone}</div>
+
+        {/* Title */}
+        <div className="text-sm font-medium break-words leading-snug">{task.title}</div>
+
+        {/* Owner + zone */}
+        <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+          <span className="flex items-center gap-0.5">
+            <User size={10} className="text-slate-400" /> {task.owner || '—'}
+          </span>
+          {task.zone && (
+            <span className="flex items-center gap-0.5">
+              <MapPin size={10} className="text-slate-400" /> {task.zone}
+            </span>
+          )}
+        </div>
+
+        {/* Dates + duration */}
+        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 flex-wrap">
+          <Clock size={10} className="text-slate-400" />
+          <span>{formatDate(task.planned_start)} → {formatDate(task.planned_end)}</span>
+          {dur && <span className="text-slate-500 font-medium">· {dur}d</span>}
+        </div>
+
+        {/* Constraint / predecessors */}
         {task.constraint_note && (
-          <div className="text-[10px] text-amber-600 mt-1 break-words">⚠ {task.constraint_note}</div>
+          <div className="text-[10px] text-amber-600 mt-1 break-words flex items-center gap-0.5">
+            <AlertTriangle size={9} /> Pred: {task.constraint_note}
+          </div>
         )}
-        <div className="mt-2 w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full" style={{ width: `${task.progress_pct}%`, background: COL_COLOR[task.kanban_status] }} />
+
+        {/* Notes (truncated) */}
+        {task.notes && (
+          <div className="text-[10px] text-slate-500 mt-1 break-words italic line-clamp-2">
+            {task.notes}
+          </div>
+        )}
+
+        {/* Progress bar */}
+        <div className="mt-2 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-full transition-all" style={{ width: `${task.progress_pct}%`, background: colColor }} />
         </div>
-        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
-          <span>Due: {task.due_date || '—'}</span>
-          <span className="text-blue-500 opacity-0 group-hover:opacity-100">edit →</span>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1.5">
+          <span className="truncate">{projName}</span>
+          <span className={task.due_date ? 'font-medium text-slate-500' : ''}>
+            Due: {formatDate(task.due_date)}
+          </span>
         </div>
       </div>
       <EditOpener task={task} projects={projects} onEdit={onEdit} onSaved={onSaved} />
@@ -61,11 +128,10 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
   );
 }
 
-// Separate component to manage modal state per card
 function EditOpener({ task, projects, onEdit, onSaved }: {
   task: Task; projects: Project[]; onEdit: (t: Task) => void; onSaved?: () => void;
 }) {
-  return null; // modal rendered by parent
+  return null;
 }
 
 function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
@@ -77,12 +143,32 @@ function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
   onSaved?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const colColor = COL_COLOR[status] || '#94a3b8';
+  // Column stats
+  const msCount = tasks.filter((t) => isMilestone(t as ScheduleTask)).length;
+  const exCount = tasks.filter((t) => isExpress(t as ScheduleTask) && !isMilestone(t as ScheduleTask)).length;
+  const avgProgress = tasks.length > 0
+    ? Math.round(tasks.reduce((s, t) => s + (t.progress_pct || 0), 0) / tasks.length)
+    : 0;
   return (
     <div className="flex-1 min-w-[72vw] sm:min-w-[280px] md:min-w-[240px]">
       <div className="flex items-center gap-2 mb-3">
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: COL_COLOR[status] }} />
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: colColor }} />
         <h3 className="font-semibold text-sm">{status}</h3>
         <span className="text-xs text-slate-400">({tasks.length})</span>
+        {msCount > 0 && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white font-medium flex items-center gap-0.5" style={{ background: MILESTONE_COLOR }}>
+            <Flag size={8} /> {msCount}
+          </span>
+        )}
+        {exCount > 0 && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white font-medium flex items-center gap-0.5" style={{ background: EXPRESS_COLOR }}>
+            <Zap size={8} /> {exCount}
+          </span>
+        )}
+        {tasks.length > 0 && (
+          <span className="text-[9px] text-slate-400 ml-auto">avg {avgProgress}%</span>
+        )}
       </div>
       <div ref={setNodeRef} className={`space-y-3 min-h-[200px] rounded-xl p-2 transition ${isOver ? 'bg-blue-50' : 'bg-slate-100/50'}`}>
         {tasks.map((t) => (
@@ -126,7 +212,6 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
 
   function onSaved() {
     if (editing) {
-      // refresh: simplest is to reload
       window.location.reload();
     }
   }
