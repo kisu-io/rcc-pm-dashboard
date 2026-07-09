@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   DndContext, DragEndEvent, useDroppable, useDraggable,
   PointerSensor, TouchSensor, useSensor, useSensors,
@@ -193,6 +193,9 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [editing, setEditing] = useState<Task | null>(null);
+
+  // Sync when parent passes new filtered tasks (filters changed)
+  useEffect(() => { setTasks(initialTasks); }, [initialTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
