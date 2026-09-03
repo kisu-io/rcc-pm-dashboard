@@ -155,34 +155,24 @@ begin
   end if;
 end$$;
 
--- ===== STORAGE POLICIES (public read for all 3 buckets) =====
+-- ===== STORAGE BUCKETS (private) =====
+-- Buckets are PRIVATE. The app reads objects through short-lived signed URLs
+-- (lib/storage.ts), so nothing here may be world-readable. Object-level policies
+-- live in supabase-storage-hardening.sql, which depends on public.is_pm() from
+-- supabase-auth.sql — run the files in that order.
 do $$
 declare
   b text;
 begin
   foreach b in array array['documents','site-photos','reports'] loop
-    if not exists (select 1 from storage.buckets where id = b) then
-      insert into storage.buckets (id, name, public) values (b, b, true) on conflict do nothing;
-    else
-      update storage.buckets set public = true where id = b;
-    end if;
+    insert into storage.buckets (id, name, public) values (b, b, false)
+      on conflict (id) do update set public = false;
   end loop;
 end$$;
 
--- Public read for buckets
+-- Remove the anon-era policies if this database still carries them. Leaving them
+-- in place let anyone holding the publishable anon key list, overwrite and DELETE
+-- every drawing, contract and site photo without signing in.
 drop policy if exists "Public read" on storage.objects;
-create policy "Public read"
-  on storage.objects for select
-  using (bucket_id in ('documents','site-photos','reports'));
-
--- Public write (phase 1 — internal tool)
 drop policy if exists "Public write" on storage.objects;
-create policy "Public write"
-  on storage.objects for insert
-  with check (bucket_id in ('documents','site-photos','reports'));
-
--- Public delete (internal)
 drop policy if exists "Public delete" on storage.objects;
-create policy "Public delete"
-  on storage.objects for delete
-  using (bucket_id in ('documents','site-photos','reports'));

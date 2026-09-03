@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Project } from '@/lib/supabase';
 import { formatVND, daysFromNow } from '@/lib/data';
 import { MapPin, Calendar, User } from 'lucide-react';
+import ProjectCoverImage from './ProjectCoverImage';
 
 const STATUS_BADGE: Record<string, string> = {
   'In Progress': 'bg-blue-100 text-blue-700',
@@ -25,10 +26,7 @@ export default function ProjectCard({ project, effProgress }: { project: Project
     >
       {/* Cover */}
       <div className="h-32 bg-gradient-to-br from-slate-200 to-slate-300 relative">
-        {project.cover_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={project.cover_url} alt={project.name} className="w-full h-full object-cover" />
-        )}
+        <ProjectCoverImage coverUrl={project.cover_url} alt={project.name} />
         <span className={`absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[project.status] || 'bg-slate-100'}`}>
           {project.status}
         </span>

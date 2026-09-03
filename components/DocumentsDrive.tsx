@@ -2,21 +2,19 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase, DocumentRow, Project } from '@/lib/supabase';
 import UploadDropzone from '@/components/UploadDropzone';
+import { downloadFile, openFile, useSignedUrl } from '@/lib/storage';
+import { childFolderPattern, folderPathOf, rewriteFolderPath, escapeLike } from '@/lib/documents';
+import { checkWrite } from '@/lib/writes';
 import {
   FileText, Image as ImageIcon, File, Video, Music, FileSpreadsheet,
   Folder, Trash2, Download, Pencil, Search, ChevronRight, Home,
   Grid3x3, List, X, ExternalLink, MoreVertical, FolderPlus, Loader2, Building2,
 } from 'lucide-react';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://eyxqbpcgrunksmirsiia.supabase.co';
 const BUCKETS = ['documents', 'site-photos', 'reports'] as const;
 type Bucket = typeof BUCKETS[number];
 
 // ===== Helpers =====
-
-function publicUrl(bucket: string, path: string) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-}
 
 function fileIcon(name: string, isFolder?: boolean, size = 20) {
   if (isFolder) return <Folder size={size} className="text-blue-500" />;
@@ -156,21 +154,42 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
 
   async function deleteDoc(d: DocumentRow) {
     if (!confirm(`Delete ${d.is_folder ? 'folder' : 'file'} "${d.name}"?${d.is_folder ? ' All files inside will also be deleted.' : ''}`)) return;
-    if (!d.is_folder) {
-      await supabase.storage.from(d.bucket).remove([d.path]);
-    } else {
-      const { data: children } = await supabase
+
+    // Order matters: the row delete is the permission-checked operation, the
+    // storage remove is not. Deleting the object first would destroy the file
+    // even when the user has no right to delete the record.
+    let childPaths: string[] = [];
+    if (d.is_folder) {
+      const exact = folderPathOf(d.folder_path, d.name);
+      const { data: children, error: listErr } = await supabase
         .from('documents')
-        .select('id,path,bucket')
+        .select('id,path,bucket,folder_path')
         .eq('bucket', d.bucket)
-        .like('folder_path', `${d.folder_path ? d.folder_path + '/' : ''}${d.name}%`);
+        // Anchored on the separator so a sibling like "Level 10" is not swept up
+        // when deleting "Level 1".
+        .or(`folder_path.eq.${exact},folder_path.like.${childFolderPattern(d.folder_path, d.name)}`);
+      if (listErr) { alert(listErr.message); return; }
       if (children && children.length) {
-        const paths = children.map((c) => c.path).filter((p) => !p.startsWith('_folders/'));
-        if (paths.length) await supabase.storage.from(d.bucket).remove(paths);
-        await supabase.from('documents').delete().in('id', children.map((c) => c.id));
+        const ids = children.map((c) => c.id);
+        const { data: deleted, error: delErr } = await supabase
+          .from('documents').delete().in('id', ids).select('id');
+        const result = checkWrite(delErr, deleted, ids.length);
+        if (!result.ok) { alert(result.message); return; }
+        childPaths = children.map((c) => c.path).filter((path) => !path.startsWith('_folders/'));
       }
     }
-    await supabase.from('documents').delete().eq('id', d.id);
+
+    const { data: deletedSelf, error: selfErr } = await supabase
+      .from('documents').delete().eq('id', d.id).select('id');
+    const selfResult = checkWrite(selfErr, deletedSelf, 1);
+    if (!selfResult.ok) { alert(selfResult.message); return; }
+
+    const objectPaths = d.is_folder ? childPaths : [d.path];
+    if (objectPaths.length) {
+      const { error: rmErr } = await supabase.storage.from(d.bucket).remove(objectPaths);
+      if (rmErr) alert(`Đã xoá bản ghi nhưng không xoá được file trong kho: ${rmErr.message}`);
+    }
+
     setRefreshKey((k) => k + 1);
     setSelected(null);
   }
@@ -182,10 +201,13 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
       await supabase.from('documents').update({ name: safe }).eq('id', d.id);
       const oldPrefix = d.folder_path ? `${d.folder_path}/${d.name}` : d.name;
       const newPrefix = d.folder_path ? `${d.folder_path}/${safe}` : safe;
-      const { data: children } = await supabase.from('documents').select('id, folder_path').like('folder_path', `${oldPrefix}%`);
+      const { data: children } = await supabase
+        .from('documents')
+        .select('id, folder_path')
+        .or(`folder_path.eq.${oldPrefix},folder_path.like.${escapeLike(oldPrefix)}/%`);
       if (children) {
         for (const c of children) {
-          const newFp = c.folder_path ? c.folder_path.replace(oldPrefix, newPrefix) : c.folder_path;
+          const newFp = rewriteFolderPath(c.folder_path, oldPrefix, newPrefix);
           await supabase.from('documents').update({ folder_path: newFp }).eq('id', c.id);
         }
       }
@@ -367,7 +389,7 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
                       <button onClick={() => { setSelected(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><ExternalLink size={12} /> Preview</button>
                     )}
                     {!d.is_folder && (
-                      <a href={publicUrl(d.bucket, d.path)} download className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Download size={12} /> Download</a>
+                      <button type="button" onClick={() => downloadFile(d.bucket, d.path, d.name)} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Download size={12} /> Download</button>
                     )}
                     <button onClick={() => { setRenaming(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Pencil size={12} /> Rename</button>
                     <button onClick={() => { setMoving(d); setMenuOpen(null); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2"><Folder size={12} /> Move folder</button>
@@ -418,7 +440,7 @@ export default function DocumentsDrive({ initialDocs = [], projects }: { initial
                           <button onClick={(e) => { e.stopPropagation(); setSelected(d); }} className="p-1 hover:bg-slate-200 rounded" title="Preview"><ExternalLink size={12} /></button>
                         )}
                         {!d.is_folder && (
-                          <a href={publicUrl(d.bucket, d.path)} download onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-slate-200 rounded" title="Download"><Download size={12} /></a>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); downloadFile(d.bucket, d.path, d.name); }} className="p-1 hover:bg-slate-200 rounded" title="Download"><Download size={12} /></button>
                         )}
                         <button onClick={(e) => { e.stopPropagation(); setRenaming(d); }} className="p-1 hover:bg-slate-200 rounded" title="Rename"><Pencil size={12} /></button>
                         <button onClick={(e) => { e.stopPropagation(); setMoving(d); }} className="p-1 hover:bg-slate-200 rounded" title="Move to folder"><Folder size={12} /></button>
@@ -501,7 +523,7 @@ function AssignProjectModal({ doc, projects, onClose, onSubmit }: {
 
 // ===== Preview Modal =====
 function PreviewModal({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) {
-  const url = publicUrl(doc.bucket, doc.path);
+  const { url, loading, error } = useSignedUrl(doc.bucket, doc.path);
   const isImg = /\.(png|jpe?g|webp|gif|svg)$/i.test(doc.name);
   const isPdf = /\.pdf$/i.test(doc.name);
   const isVideo = /\.(mp4|webm|mov)$/i.test(doc.name);
@@ -516,13 +538,23 @@ function PreviewModal({ doc, onClose }: { doc: DocumentRow; onClose: () => void 
             <span className="text-[10px] text-slate-400">{formatSize(doc.size)}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <a href={url} download className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><Download size={14} /> Download</a>
-            <a href={url} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><ExternalLink size={14} /> Open</a>
+            <button type="button" onClick={() => downloadFile(doc.bucket, doc.path, doc.name)} className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><Download size={14} /> Download</button>
+            <button type="button" onClick={() => openFile(doc.bucket, doc.path)} className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><ExternalLink size={14} /> Open</button>
             <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={18} /></button>
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-slate-50 flex items-center justify-center p-4 min-h-[300px]">
-          {isImg ? (
+          {loading ? (
+            <div className="flex flex-col items-center gap-2 text-slate-500">
+              <Loader2 className="animate-spin" size={28} />
+              <p className="text-xs">Đang tạo link truy cập…</p>
+            </div>
+          ) : !url ? (
+            <div className="text-center text-slate-500">
+              <File size={48} className="mx-auto mb-3 opacity-40" />
+              <p className="text-sm">{error || 'Không mở được file này.'}</p>
+            </div>
+          ) : isImg ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={url} alt={doc.name} className="max-w-full max-h-[80vh] object-contain" />
           ) : isPdf ? (
@@ -535,7 +567,7 @@ function PreviewModal({ doc, onClose }: { doc: DocumentRow; onClose: () => void 
             <div className="text-center text-slate-500">
               <File size={48} className="mx-auto mb-3 opacity-40" />
               <p className="text-sm">Preview not available for {fileExt(doc.name)} files</p>
-              <a href={url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline mt-2 inline-block">Download to view</a>
+              <button type="button" onClick={() => downloadFile(doc.bucket, doc.path, doc.name)} className="text-xs text-blue-600 hover:underline mt-2 inline-block">Download to view</button>
             </div>
           )}
         </div>
