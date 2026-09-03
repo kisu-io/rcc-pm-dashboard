@@ -33,9 +33,19 @@ export default async function TeamPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/*
+        Titled "Roles", not "Team", because `tasks.owner` holds role codes
+        rather than people — 'CE/MM' (chief engineer / maintenance manager),
+        'GM/EH', 'Chef/GM', 'Rosie/Chi?'. Calling 66 of those "members" and
+        labelling every one "Crew" implied a staff list this data does not have.
+      */}
       <div>
-        <h1 className="text-xl md:text-2xl font-bold">Team</h1>
-        <p className="text-xs md:text-sm text-slate-500">{list.length} members · workload overview</p>
+        <h1 className="text-xl md:text-2xl font-bold">Roles &amp; Workload</h1>
+        <p className="text-sm text-slate-500">
+          Phân công theo vai trò · {list.length} role code{list.length === 1 ? '' : 's'} from{' '}
+          <code className="px-1 bg-slate-100 rounded text-xs">tasks.owner</code>. These are
+          responsibilities, not named people.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">

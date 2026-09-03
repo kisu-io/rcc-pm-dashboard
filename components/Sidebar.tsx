@@ -8,16 +8,29 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
+/**
+ * Ordered by how much this programme's data actually supports.
+ *
+ * Readiness, the task board and the schedule carry all 679 rows. Budget,
+ * Materials and Calendar are backed by empty or near-useless data (`budget` is
+ * null, `cost_entries` and `materials` have no rows, and `due_date` resolves to
+ * only 30 distinct month-boundary values), so they sit below a divider rather
+ * than in the middle of the primary list.
+ */
 const nav = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/', label: 'Opening Readiness', icon: LayoutDashboard },
+  { href: '/tasks', label: 'Tasks & Gates', icon: ListTodo },
+  { href: '/gantt', label: 'Schedule', icon: Calendar },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
-  { href: '/tasks', label: 'Tasks (Kanban)', icon: ListTodo },
-  { href: '/gantt', label: 'Gantt', icon: Calendar },
-  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { href: '/team', label: 'Roles', icon: Users },
   { href: '/documents', label: 'Documents', icon: FileText },
+];
+
+/** Reachable, just not promoted. */
+const secondaryNav = [
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/budget', label: 'Budget & Cost', icon: Wallet },
   { href: '/materials', label: 'Materials', icon: Boxes },
-  { href: '/team', label: 'Team', icon: Users },
 ];
 
 const adminNav = [
@@ -91,6 +104,24 @@ export default function Sidebar() {
               </Link>
             );
           })}
+          <div className="border-t border-white/10 mt-2 pt-3 space-y-1">
+            {secondaryNav.map(({ href, label, icon: Icon }) => {
+              const active = path === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
+                    active ? 'bg-[#2563eb] text-white' : 'text-slate-400 hover:bg-white/10'
+                  }`}
+                >
+                  <Icon size={18} />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
           {role === 'admin' && (
             <div className="border-t border-white/10 mt-2 pt-3 space-y-1">
               {adminNav.map(({ href, label, icon: Icon }) => {

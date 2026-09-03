@@ -47,6 +47,14 @@ export type Task = {
   notes: string | null;
   depends_on?: string[] | null;
   lead_time_days?: number | null;
+  /** 'work' = a scheduled, owned action. 'gate' = an opening-readiness
+   *  criterion (normally undated and unowned). Added by supabase-phase8.sql;
+   *  optional so the app runs before the migration — lib/task-kind.ts infers
+   *  the same answer from `zone` when it is absent. */
+  task_kind?: 'work' | 'gate' | null;
+  /** Month bucket the row was planned into, first-of-month. `due_date` carries
+   *  no day precision: 319 of 366 dated rows land on the 1st or the 15th. */
+  due_month?: string | null;
 };
 
 export type Milestone = {

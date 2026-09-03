@@ -3,15 +3,7 @@ import { Project } from '@/lib/supabase';
 import { formatVND, daysFromNow } from '@/lib/data';
 import { MapPin, Calendar, User } from 'lucide-react';
 import ProjectCoverImage from './ProjectCoverImage';
-
-const STATUS_BADGE: Record<string, string> = {
-  'In Progress': 'bg-blue-100 text-blue-700',
-  'On Hold': 'bg-amber-100 text-amber-700',
-  'Complete': 'bg-green-100 text-green-700',
-  'Not Started': 'bg-slate-100 text-slate-600',
-  'Pending': 'bg-purple-100 text-purple-700',
-  'Upcoming': 'bg-cyan-100 text-cyan-700',
-};
+import { projectStatusBadge } from '@/lib/ui';
 
 export default function ProjectCard({ project, effProgress }: { project: Project; effProgress?: number }) {
   const due = daysFromNow(project.target_end);
@@ -27,7 +19,7 @@ export default function ProjectCard({ project, effProgress }: { project: Project
       {/* Cover */}
       <div className="h-32 bg-gradient-to-br from-slate-200 to-slate-300 relative">
         <ProjectCoverImage coverUrl={project.cover_url} alt={project.name} />
-        <span className={`absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[project.status] || 'bg-slate-100'}`}>
+        <span className={`absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full font-medium ${projectStatusBadge(project.status)}`}>
           {project.status}
         </span>
       </div>
