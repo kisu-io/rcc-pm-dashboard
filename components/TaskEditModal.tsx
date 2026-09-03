@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { supabase, Task, Project } from '@/lib/supabase';
+import { checkWrite } from '@/lib/writes';
 import { X, Loader2, Pencil, Trash2 } from 'lucide-react';
 
 const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
@@ -60,10 +61,18 @@ export default function TaskEditModal({
       constraint_note: form.constraint_note || null,
       notes: form.notes || null,
     };
-    const { error: err } = await supabase.from('tasks').update(payload).eq('id', task.id);
+    // `.select()` is load-bearing: an RLS-filtered UPDATE returns no error and
+    // zero rows, so without the returned row this reports a successful save for
+    // an edit the database discarded.
+    const { data, error: err } = await supabase
+      .from('tasks')
+      .update(payload)
+      .eq('id', task.id)
+      .select('id');
     setSaving(false);
-    if (err) {
-      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
+    const result = checkWrite(err, data, 1);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     onSaved?.();
@@ -73,10 +82,15 @@ export default function TaskEditModal({
   async function deleteTask() {
     if (!confirm(`Delete "${task.title}"?`)) return;
     setSaving(true);
-    const { error: err } = await supabase.from('tasks').delete().eq('id', task.id);
+    const { data, error: err } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', task.id)
+      .select('id');
     setSaving(false);
-    if (err) {
-      if (err.message.includes("row-level security") || err.message.includes("RLS")) { setError("Khong co quyen ghi. Can dang nhap voi role PM hoac Admin. Thu logout roi login lai."); } else { setError(err.message); }
+    const result = checkWrite(err, data, 1);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     onSaved?.();

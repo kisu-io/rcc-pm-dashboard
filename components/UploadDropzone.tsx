@@ -2,6 +2,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UploadCloud, Loader2 } from 'lucide-react';
+import { checkWrite } from '@/lib/writes';
 
 const BUCKETS = ['documents', 'site-photos', 'reports'] as const;
 type Bucket = typeof BUCKETS[number];
@@ -17,12 +18,15 @@ export default function UploadDropzone({
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ name: string; message: string }[]>([]);
   const [lastCount, setLastCount] = useState(0);
 
   const uploadFiles = useCallback(async (files: FileList | File[]) => {
     setError(null);
+    setFailed([]);
     setUploading(true);
     let ok = 0;
+    const problems: { name: string; message: string }[] = [];
     const filesArr = Array.from(files);
     for (const file of filesArr) {
       const ts = Date.now();
@@ -31,11 +35,13 @@ export default function UploadDropzone({
       const storagePath = folderPath ? `${folderPath}/${ts}-${safeName}` : `${ts}-${safeName}`;
       const { error: upErr } = await supabase.storage.from(bucket).upload(storagePath, file, { upsert: false });
       if (upErr) {
-        setError(upErr.message);
+        problems.push({ name: file.name, message: upErr.message });
         continue;
       }
-      // Always insert metadata row (project_id nullable)
-      const { error: dbErr } = await supabase.from('documents').insert({
+      // The metadata row is what makes the file visible in the app. If it does not
+      // land, the object is invisible dead weight in the bucket — so remove it and
+      // report the file as failed rather than counting it as uploaded.
+      const { data, error: dbErr } = await supabase.from('documents').insert({
         project_id: projectId || null,
         name: file.name,
         bucket,
@@ -45,14 +51,19 @@ export default function UploadDropzone({
         mimetype: file.type || null,
         is_folder: false,
         uploaded_by: 'web',
-      });
-      if (dbErr) {
-        console.error('DB insert failed:', dbErr.message);
+      }).select('id');
+      const result = checkWrite(dbErr, data, 1);
+      if (!result.ok) {
+        await supabase.storage.from(bucket).remove([storagePath]);
+        problems.push({ name: file.name, message: result.message });
+        continue;
       }
       ok++;
     }
     setUploading(false);
     setLastCount(ok);
+    setFailed(problems);
+    if (problems.length) setError(`${problems.length}/${filesArr.length} file không lưu được.`);
     onUploaded?.();
   }, [projectId, bucket, folderPath, onUploaded]);
 
@@ -91,7 +102,14 @@ export default function UploadDropzone({
             {bucket}{folderPath ? ` / ${folderPath}` : ''} · nhiều file OK
           </p>
           {error && <p className="text-[10px] text-red-600 mt-2 break-words">⚠ {error}</p>}
-          {lastCount > 0 && !error && <p className="text-[10px] text-green-600 mt-2">✓ {lastCount} file uploaded</p>}
+          {failed.length > 0 && (
+            <ul className="text-[10px] text-red-600 mt-1 space-y-0.5 text-left">
+              {failed.map((f) => (
+                <li key={f.name} className="break-words">• {f.name} — {f.message}</li>
+              ))}
+            </ul>
+          )}
+          {lastCount > 0 && <p className="text-[10px] text-green-600 mt-2">✓ {lastCount} file uploaded</p>}
         </>
       )}
     </div>

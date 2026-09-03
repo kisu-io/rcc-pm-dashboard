@@ -12,6 +12,8 @@ import {
   MILESTONE_COLOR, EXPRESS_COLOR,
 } from '@/lib/schedule-utils';
 import { Flag, Zap, AlertTriangle, Clock, User, MapPin } from 'lucide-react';
+import { checkWrite } from '@/lib/writes';
+import { useCanEdit } from '@/lib/useRole';
 
 const COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
 const COL_COLOR: Record<string, string> = {
@@ -193,6 +195,8 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
+  const canEdit = useCanEdit();
 
   // Sync when parent passes new filtered tasks (filters changed)
   useEffect(() => { setTasks(initialTasks); }, [initialTasks]);
@@ -207,10 +211,33 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
     if (!over) return;
     const newStatus = over.id as string;
     if (!COLUMNS.includes(newStatus)) return;
+
+    const moved = tasks.find((t) => t.id === active.id);
+    if (!moved || moved.kanban_status === newStatus) return;
+    const previousStatus = moved.kanban_status;
+
+    setDragError(null);
     setTasks((prev) => prev.map((t) => (t.id === active.id ? { ...t, kanban_status: newStatus } : t)));
+
+    // An RLS-filtered UPDATE returns no error and zero rows, so ask for the row
+    // back: without this a read-only user sees the card move and never learns
+    // the change was discarded.
+    let result;
     try {
-      await supabase.from('tasks').update({ kanban_status: newStatus }).eq('id', active.id);
-    } catch {}
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ kanban_status: newStatus })
+        .eq('id', active.id)
+        .select('id');
+      result = checkWrite(error, data, 1);
+    } catch (err) {
+      result = { ok: false as const, message: err instanceof Error ? err.message : 'Không lưu được thay đổi.' };
+    }
+
+    if (!result.ok) {
+      setTasks((prev) => prev.map((t) => (t.id === active.id ? { ...t, kanban_status: previousStatus } : t)));
+      setDragError(`"${moved.title}" — ${result.message}`);
+    }
   }
 
   function onSaved() {
@@ -221,7 +248,14 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
 
   return (
     <>
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      {dragError && (
+        <div role="alert" className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{dragError}</span>
+          <button type="button" onClick={() => setDragError(null)} className="font-medium underline">Đóng</button>
+        </div>
+      )}
+      <DndContext sensors={canEdit ? sensors : undefined} onDragEnd={onDragEnd}>
         <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory">
           {COLUMNS.map((status) => (
             <div key={status} className="snap-start shrink-0">
