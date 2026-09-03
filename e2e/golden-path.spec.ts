@@ -14,8 +14,8 @@ test('home loads with dashboard heading', async ({ page }) => {
 
 test('projects page lists demo projects', async ({ page }) => {
   await page.goto('/projects');
+  // The demo dataset was reduced to a single sample project in fae6d62.
   await expect(page.getByText('Le Meridien Fit-out')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('Riverbank Place Office')).toBeVisible();
 });
 
 test('tasks kanban shows columns', async ({ page }) => {
@@ -28,8 +28,8 @@ test('tasks kanban shows columns', async ({ page }) => {
 test('budget page renders with total committed', async ({ page }) => {
   await page.goto('/budget');
   await expect(page.getByText(/total committed/i)).toBeVisible({ timeout: 15_000 });
-  // Demo data total budget = 5e9 + 3e9 + 1.2e9 + 8e9 = 17.2B
-  await expect(page.getByText(/17\.20B/)).toBeVisible();
+  // Demo data total budget = the single sample project's 5e9.
+  await expect(page.getByText(/5\.00B/).first()).toBeVisible();
 });
 
 test('materials page shows heading', async ({ page }) => {

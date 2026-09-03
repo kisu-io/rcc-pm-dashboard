@@ -1,6 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, DocumentRow, Project } from '@/lib/supabase';
+import { downloadFile } from '@/lib/storage';
+import { toStorageRef } from '@/lib/documents';
+import { checkWrite } from '@/lib/writes';
 import UploadDropzone from '@/components/UploadDropzone';
 import UniversalPreview from '@/components/UniversalPreview';
 import {
@@ -9,13 +12,8 @@ import {
   ChevronRight, Home, FolderPlus, Search,
 } from 'lucide-react';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://eyxqbpcgrunksmirsiia.supabase.co';
 const BUCKETS = ['documents', 'site-photos', 'reports'] as const;
 type Bucket = typeof BUCKETS[number];
-
-function publicUrl(bucket: string, path: string) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-}
 
 function fileIcon(name: string, isFolder?: boolean, size = 18) {
   if (isFolder) return <Folder size={size} className="text-blue-500" />;
@@ -84,8 +82,15 @@ export default function ProjectDocuments({ project }: { project: Project }) {
 
   async function deleteDoc(d: DocumentRow) {
     if (!confirm(`Delete ${d.is_folder ? 'folder' : 'file'} "${d.name}"?`)) return;
-    if (!d.is_folder) await supabase.storage.from(d.bucket).remove([d.path]);
-    await supabase.from('documents').delete().eq('id', d.id);
+    // Delete the permission-checked row first; only then remove the object, so a
+    // user without delete rights cannot destroy the file and leave the row behind.
+    const { data, error } = await supabase.from('documents').delete().eq('id', d.id).select('id');
+    const result = checkWrite(error, data, 1);
+    if (!result.ok) { alert(result.message); return; }
+    if (!d.is_folder) {
+      const { error: rmErr } = await supabase.storage.from(d.bucket).remove([d.path]);
+      if (rmErr) alert(`Đã xoá bản ghi nhưng không xoá được file trong kho: ${rmErr.message}`);
+    }
     setRefreshKey((k) => k + 1);
     setSelected(null);
   }
@@ -95,9 +100,13 @@ export default function ProjectDocuments({ project }: { project: Project }) {
       alert('Cover phải là file ảnh');
       return;
     }
-    const url = publicUrl(d.bucket, d.path);
-    const { error } = await supabase.from('projects').update({ cover_url: url }).eq('id', project.id);
-    if (error) { alert(error.message); return; }
+    // Buckets are private, so store a reference the app can sign at render time
+    // rather than a public URL that would 404 for everyone.
+    const ref = toStorageRef(d.bucket, d.path);
+    const { data, error } = await supabase
+      .from('projects').update({ cover_url: ref }).eq('id', project.id).select('id');
+    const result = checkWrite(error, data, 1);
+    if (!result.ok) { alert(result.message); return; }
     setShowSetCover(null);
     alert('Cover updated. Reload page to see.');
     window.location.reload();
@@ -190,7 +199,7 @@ export default function ProjectDocuments({ project }: { project: Project }) {
                       <button onClick={() => { setSelected(d); setMenuOpen(null); }} className="w-full text-left px-2 py-1.5 hover:bg-slate-100 flex items-center gap-1.5"><ExternalLink size={11} /> Preview</button>
                     )}
                     {!d.is_folder && (
-                      <a href={publicUrl(d.bucket, d.path)} download className="w-full text-left px-2 py-1.5 hover:bg-slate-100 flex items-center gap-1.5"><Download size={11} /> Download</a>
+                      <button type="button" onClick={() => downloadFile(d.bucket, d.path, d.name)} className="w-full text-left px-2 py-1.5 hover:bg-slate-100 flex items-center gap-1.5"><Download size={11} /> Download</button>
                     )}
                     {!d.is_folder && /\.(png|jpe?g|webp|gif|svg)$/i.test(d.name) && (
                       <button onClick={() => { setShowSetCover(d); setMenuOpen(null); }} className="w-full text-left px-2 py-1.5 hover:bg-slate-100 flex items-center gap-1.5"><ImageIcon size={11} /> Set as cover</button>

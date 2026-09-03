@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { supabase, Project } from '@/lib/supabase';
+import { checkWrite } from '@/lib/writes';
 import { X, Plus, Loader2 } from 'lucide-react';
 
 const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
@@ -49,10 +50,13 @@ export default function AddTaskModal({
       due_date: form.due_date || null,
       constraint_note: form.constraint_note || null,
     };
-    const { error: err } = await supabase.from('tasks').insert(payload);
+    // Ask for the inserted row back — an RLS-filtered INSERT reports success
+    // with nothing written.
+    const { data, error: err } = await supabase.from('tasks').insert(payload).select('id');
     setSaving(false);
-    if (err) {
-      setError(err.message);
+    const result = checkWrite(err, data, 1);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     // Reset + close

@@ -2,15 +2,15 @@
 import { useAuth } from '@/components/AuthProvider';
 import Sidebar from '@/components/Sidebar';
 import LoginGate from '@/components/LoginGate';
+import { E2E_BYPASS_AUTH } from '@/lib/env';
 import { Loader2 } from 'lucide-react';
 
-const E2E_BYPASS = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   // E2E bypass: skip auth gate entirely (demo data renders without backend)
-  if (E2E_BYPASS) {
+  if (E2E_BYPASS_AUTH) {
     return (
       <div className="flex min-h-screen">
         <Sidebar />

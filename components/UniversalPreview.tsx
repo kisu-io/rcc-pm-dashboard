@@ -1,15 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { DocumentRow } from '@/lib/supabase';
+import { useSignedUrl, downloadFile, openFile } from '@/lib/storage';
 import {
   X, Download, ExternalLink, Loader2, File as FileIcon, AlertTriangle,
 } from 'lucide-react';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://eyxqbpcgrunksmirsiia.supabase.co';
-
-function publicUrl(bucket: string, path: string) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-}
 
 function formatSize(bytes?: number | null) {
   if (!bytes) return '—';
@@ -19,7 +14,7 @@ function formatSize(bytes?: number | null) {
 }
 
 export default function UniversalPreview({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) {
-  const url = publicUrl(doc.bucket, doc.path);
+  const { url, loading: urlLoading, error: urlError } = useSignedUrl(doc.bucket, doc.path);
   const name = doc.name.toLowerCase();
 
   const isImg = /\.(png|jpe?g|webp|gif|svg)$/.test(name);
@@ -43,35 +38,47 @@ export default function UniversalPreview({ doc, onClose }: { doc: DocumentRow; o
             <span className="text-[10px] text-slate-400">{formatSize(doc.size)}</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <a href={url} download className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><Download size={13} /> Download</a>
-            <a href={url} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><ExternalLink size={13} /> Open</a>
+            <button type="button" onClick={() => downloadFile(doc.bucket, doc.path, doc.name)} className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><Download size={13} /> Download</button>
+            <button type="button" onClick={() => openFile(doc.bucket, doc.path)} className="text-xs px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1"><ExternalLink size={13} /> Open</button>
             <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={18} /></button>
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-auto bg-slate-50 flex items-center justify-center p-3 min-h-[280px]">
-          {isImg && (
+          {urlLoading && (
+            <div className="flex flex-col items-center gap-2 text-slate-500">
+              <Loader2 className="animate-spin" size={28} />
+              <p className="text-xs">Đang tạo link truy cập…</p>
+            </div>
+          )}
+          {!urlLoading && !url && (
+            <div className="text-center text-slate-500">
+              <AlertTriangle size={40} className="mx-auto mb-3 opacity-50" />
+              <p className="text-sm">{urlError || 'Không mở được file này.'}</p>
+            </div>
+          )}
+          {url && isImg && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={url} alt={doc.name} className="max-w-full max-h-[80vh] object-contain" />
           )}
-          {isPdf && (
+          {url && isPdf && (
             <iframe src={url} title={doc.name} className="w-full h-[80vh] border-0 bg-white" />
           )}
-          {isVideo && (
+          {url && isVideo && (
             <video src={url} controls className="max-w-full max-h-[80vh]" />
           )}
-          {isAudio && (
+          {url && isAudio && (
             <audio src={url} controls className="w-full" />
           )}
-          {isDocx && <DocxPreview url={url} />}
-          {isXlsx && <XlsxPreview url={url} fileName={doc.name} />}
-          {isText && <TextPreview url={url} />}
-          {!isImg && !isPdf && !isVideo && !isAudio && !isDocx && !isXlsx && !isText && (
+          {url && isDocx && <DocxPreview url={url} />}
+          {url && isXlsx && <XlsxPreview url={url} fileName={doc.name} />}
+          {url && isText && <TextPreview url={url} />}
+          {url && !isImg && !isPdf && !isVideo && !isAudio && !isDocx && !isXlsx && !isText && (
             <div className="text-center text-slate-500">
               <FileIcon size={48} className="mx-auto mb-3 opacity-40" />
               <p className="text-sm">No preview for this file type</p>
-              <a href={url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline mt-2 inline-block">Download to view</a>
+              <button type="button" onClick={() => downloadFile(doc.bucket, doc.path, doc.name)} className="text-xs text-blue-600 hover:underline mt-2 inline-block">Download to view</button>
             </div>
           )}
         </div>
