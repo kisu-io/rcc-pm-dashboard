@@ -90,7 +90,14 @@ test('documents page renders', async ({ page }) => {
 test('project detail loads with milestones', async ({ page }) => {
   // Demo project id '1' = Le Meridien Fit-out
   await page.goto('/projects/1');
-  await expect(page.getByText('Le Meridien Fit-out')).toBeVisible({ timeout: 15_000 });
+  // Match the heading, not any text node: the readiness summary also prints the
+  // project name in its "<name> · pre-opening" eyebrow, so a bare getByText is
+  // ambiguous under strict mode.
+  await expect(
+    page.getByRole('heading', { name: 'Le Meridien Fit-out', level: 1 }),
+  ).toBeVisible({ timeout: 15_000 });
+  // Per-project readiness, scoped to this project rather than the portfolio.
+  await expect(page.getByText(/opening gates signed off|no readiness gates/i)).toBeVisible();
   // Milestones section (client component — wait for hydration)
   await expect(page.getByText(/milestones/i).first()).toBeVisible({ timeout: 15_000 });
   // Demo milestone "Design sign-off"
