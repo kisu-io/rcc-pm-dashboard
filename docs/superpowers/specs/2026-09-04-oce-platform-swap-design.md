@@ -173,8 +173,12 @@ restorable, old core archived on `main` under tag `legacy-nextjs-final`.
 
 ### Plan 4 — Cutover and retirement
 
-- Merge `platform/oce` → `main` (`--allow-unrelated-histories`, keeps the old
-  history reachable); `main` becomes the default branch.
+- Merge `platform/oce` → `main`. The Next.js history is already joined into
+  `platform/oce` by `-s ours` merges — the first at `845524d`, repeated once
+  PR #10 lands on `main` — which record `main` as an ancestor while leaving the
+  fork's tree unchanged. The cutover is therefore an ordinary `--no-ff` merge,
+  not `--allow-unrelated-histories`, and the old history stays reachable (also
+  at tag `legacy-nextjs-final`); `main` becomes the default branch.
 - Mr Phán: register (becomes admin), approve the other users, import the
   workbooks, verify the programme page against the last Vercel screenshot.
 - Keep the Vercel URL alive read-only for 14 days, then delete the Vercel
