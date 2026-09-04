@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/components/AuthProvider';
 import AppShell from '@/components/AppShell';
+import { getModuleAvailability } from '@/lib/data-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,12 +18,16 @@ export const viewport: Viewport = {
   themeColor: '#0F1B3D',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Decides whether Budget and Materials appear in the nav at all. Cheap head
+  // counts — see lib/data-server.ts::getModuleAvailability.
+  const modules = await getModuleAvailability();
+
   return (
     <html lang="vi">
       <body>
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          <AppShell modules={modules}>{children}</AppShell>
         </AuthProvider>
       </body>
     </html>

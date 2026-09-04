@@ -103,6 +103,41 @@ export async function getCostEntries(projectId?: string): Promise<CostEntry[]> {
   return (data as CostEntry[]) || [];
 }
 
+export type ModuleAvailability = { budget: boolean; materials: boolean };
+
+/**
+ * Which money/logistics modules have anything behind them.
+ *
+ * `projects.budget` is null, `cost_entries` is empty and `materials` is empty
+ * on this programme, so those routes rendered four counters of `0` and a table
+ * of em-dashes — which reads as "we have spent nothing" rather than "no budget
+ * has been set". Rather than keep honest-but-useless pages in the navigation,
+ * the nav hides them until there is something to show, and they return on
+ * their own the moment a budget or a first row is entered.
+ *
+ * Head counts only: no row data crosses the wire, and it runs once per request
+ * in the layout.
+ */
+export async function getModuleAvailability(): Promise<ModuleAvailability> {
+  if (!hasKey || isE2E) {
+    return {
+      budget: demoProjects.some((p) => p.budget != null),
+      materials: false,
+    };
+  }
+  const s = createServerSupabase();
+  const [budgeted, costs, materials] = await Promise.all([
+    s.from('projects').select('id', { count: 'exact', head: true }).not('budget', 'is', null),
+    s.from('cost_entries').select('id', { count: 'exact', head: true }),
+    s.from('materials').select('id', { count: 'exact', head: true }),
+  ]);
+  return {
+    // The budget page earns its place once either a budget or a cost entry exists.
+    budget: (budgeted.count ?? 0) > 0 || (costs.count ?? 0) > 0,
+    materials: (materials.count ?? 0) > 0,
+  };
+}
+
 /** Server-side: returns the current user's role (or 'anonymous').
  *  Uses the security-definer RPC `current_user_role()` to bypass RLS
  *  (the direct select on user_roles can fail if the SSR cookie session

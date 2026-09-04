@@ -50,11 +50,28 @@ test('tasks page separates schedulable work from readiness gates', async ({ page
   await expect(work).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('budget page renders with total committed', async ({ page }) => {
+test('budget page says no budget is set rather than showing zeros', async ({ page }) => {
+  // The fixture now matches production: budget null, no cost entries. Four
+  // counters reading 0 would claim "we have spent nothing"; the truth is that
+  // no budget exists.
   await page.goto('/budget');
-  await expect(page.getByText(/total committed/i)).toBeVisible({ timeout: 15_000 });
-  // Demo data total budget = the single sample project's 5e9.
-  await expect(page.getByText(/5\.00B/).first()).toBeVisible();
+  await expect(page.getByText(/no budget set for this programme/i)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText(/total committed/i)).toBeHidden();
+});
+
+test('budget and materials are kept out of the nav while they are empty', async ({ page }) => {
+  await page.goto('/');
+  const nav = page.locator('aside');
+  await expect(nav.getByRole('link', { name: /opening readiness/i })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(nav.getByRole('link', { name: /budget/i })).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: /materials/i })).toHaveCount(0);
+  // Still reachable directly — hidden from the nav, not removed.
+  await page.goto('/budget');
+  await expect(page.locator('h1')).toContainText(/budget/i);
 });
 
 test('materials page shows heading', async ({ page }) => {

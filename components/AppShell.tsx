@@ -3,17 +3,24 @@ import { useAuth } from '@/components/AuthProvider';
 import Sidebar from '@/components/Sidebar';
 import LoginGate from '@/components/LoginGate';
 import { E2E_BYPASS_AUTH } from '@/lib/env';
+import type { ModuleAvailability } from '@/lib/data-server';
 import { Loader2 } from 'lucide-react';
 
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  modules,
+}: {
+  children: React.ReactNode;
+  modules: ModuleAvailability;
+}) {
   const { user, loading } = useAuth();
 
   // E2E bypass: skip auth gate entirely (demo data renders without backend)
   if (E2E_BYPASS_AUTH) {
     return (
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Sidebar modules={modules} />
         <main className="flex-1 w-full min-w-0 p-4 md:p-6 pt-20 md:pt-6 overflow-x-hidden">{children}</main>
       </div>
     );
@@ -36,7 +43,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar modules={modules} />
       <main className="flex-1 w-full min-w-0 p-4 md:p-6 pt-20 md:pt-6 overflow-x-hidden">{children}</main>
     </div>
   );

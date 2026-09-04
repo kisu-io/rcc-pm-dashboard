@@ -133,16 +133,28 @@ export default async function ProjectDetail({ params }: { params: { id: string }
           <div className="text-xl md:text-2xl font-bold">{tasks.length}</div>
           <div className="text-[10px] text-slate-500 mt-1">{done} done</div>
         </div>
-        <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
-          <div className="text-[10px] text-slate-400 uppercase">Budget used</div>
-          <div className="text-xl md:text-2xl font-bold">{budgetUtil}%</div>
-          <div className="text-[10px] text-slate-500 mt-1">{formatVND(project.spent)} / {formatVND(project.budget)}</div>
-        </div>
-        <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
-          <div className="text-[10px] text-slate-400 uppercase">Remaining</div>
-          <div className="text-xl md:text-2xl font-bold">{formatVND(remaining)}</div>
-          <div className="text-[10px] text-slate-500 mt-1">of {formatVND(project.budget)}</div>
-        </div>
+        {/* Only shown when a budget exists. With `budget` null these read
+            "Budget used 0%" and "Remaining 0" — which is the arithmetic
+            falling back to zero, not a measurement, and says "we have spent
+            nothing" when the truth is "no budget has been set". */}
+        {project.budget != null && (
+          <>
+            <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
+              <div className="text-xs text-slate-500 uppercase tracking-wide">Budget used</div>
+              <div className="text-xl md:text-2xl font-bold tabular-nums">{budgetUtil}%</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {formatVND(project.spent)} / {formatVND(project.budget)}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
+              <div className="text-xs text-slate-500 uppercase tracking-wide">Remaining</div>
+              <div className="text-xl md:text-2xl font-bold tabular-nums">
+                {formatVND(remaining)}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">of {formatVND(project.budget)}</div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Budget bar */}
