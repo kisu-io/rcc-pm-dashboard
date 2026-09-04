@@ -34,6 +34,11 @@ export const dynamic = 'force-dynamic';
  * does not restore is that page's habit of showing a number where there was no
  * data: five of the six modules currently have no records, and this page says
  * so rather than drawing them at 0% beside modules genuinely stuck at 0%.
+ *
+ * Percentages here count work items only. The 323 opening gates are an
+ * acceptance checklist, not a workload, and blending the two is what made the
+ * old dashboard report 6% — see lib/task-kind.ts. Gates keep their own
+ * met/total ratio, which is the number that matters at T-27.
  */
 
 const LOOK_AHEAD_DAYS = 14;
@@ -97,6 +102,8 @@ export default async function ProgrammeProgressPage() {
 
   const pending = portfolio.reduce((sum, m) => sum + m.pending, 0);
   const overdue = portfolio.reduce((sum, m) => sum + m.overdue, 0);
+  const gatesTotal = portfolio.reduce((sum, m) => sum + m.gatesTotal, 0);
+  const gatesMet = portfolio.reduce((sum, m) => sum + m.gatesMet, 0);
   const liveModules = portfolio.filter((m) => m.total > 0).length;
   const openingSoon = rows.filter(
     (r) => r.daysToTarget != null && r.daysToTarget >= 0 && r.daysToTarget <= OPENING_SOON_DAYS,
@@ -130,12 +137,12 @@ export default async function ProgrammeProgressPage() {
           hint={`${openingSoon} within ${OPENING_SOON_DAYS} days`}
         />
         <Stat
-          label="Modules live"
-          value={`${liveModules} / ${MODULE_ORDER.length}`}
-          hint="teams with records loaded"
+          label="Opening gates"
+          value={gatesTotal === 0 ? '—' : `${gatesMet} / ${gatesTotal}`}
+          hint="signed off · đã ký duyệt"
         />
-        <Stat label="Pending" value={pending} tone="warning" hint="open across all modules" />
-        <Stat label="Overdue" value={overdue} tone="critical" hint="open and past its date" />
+        <Stat label="Pending" value={pending} tone="warning" hint="open work across all modules" />
+        <Stat label="Overdue" value={overdue} tone="critical" hint="open work past its date" />
       </div>
 
       <section className="space-y-3">
@@ -143,7 +150,8 @@ export default async function ProgrammeProgressPage() {
           <div>
             <h2 className="text-base font-semibold">Progress by module</h2>
             <p className="text-xs text-slate-500">
-              Tiến độ theo hạng mục · rolled up across every project
+              Tiến độ theo hạng mục · {liveModules} of {MODULE_ORDER.length} teams have loaded
+              records
             </p>
           </div>
         </div>

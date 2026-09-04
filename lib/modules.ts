@@ -23,6 +23,8 @@
  * ledger on each project page.
  */
 
+import { partitionByKind, type ClassifiableTask } from './task-kind';
+
 export const MODULES = [
   'legal',
   'design',
@@ -76,7 +78,7 @@ export const MODULE_PCT_COLUMN: Record<ModuleKey, string> = {
 
 const MODULE_SET = new Set<string>(MODULES);
 
-export type ModularTask = {
+export type ModularTask = ClassifiableTask & {
   module?: string | null;
   kanban_status?: string | null;
   due_date?: string | null;
@@ -109,17 +111,23 @@ export type ModuleState = 'no-data' | 'not-started' | 'behind' | 'on-track' | 'c
 
 export type ModuleProgress = {
   module: ModuleKey;
+  /** Every record in the module, both kinds. */
   total: number;
-  done: number;
-  /** 0..100. */
+  /** Schedulable, owned actions. */
+  workTotal: number;
+  workDone: number;
+  /** Opening-acceptance criteria. Normally undated and unowned — correctly so. */
+  gatesTotal: number;
+  gatesMet: number;
+  /** 0..100, derived from work alone unless the PM overrode it. */
   progressPct: number;
-  /** True when progressPct came from the PM's override, not from the tasks. */
+  /** True when progressPct came from the PM's override, not from the records. */
   isOverridden: boolean;
-  /** Open — everything not yet Done. This is what "pending" means on screen. */
+  /** Open work. This is what "pending" means on screen. */
   pending: number;
-  /** Open, dated, and the date has passed. */
+  /** Open work, dated, and the date has passed. */
   overdue: number;
-  /** Open with no date at all. */
+  /** Open work with no date — the genuine scheduling gap. Gates are excluded. */
   unscheduled: number;
   wip: number;
   state: ModuleState;
@@ -134,21 +142,59 @@ function isPast(due: string, today: string): boolean {
   return Math.round((b - a) / MS_PER_DAY) < 0;
 }
 
-function stateFor(total: number, done: number, overdue: number, wip: number): ModuleState {
-  if (total === 0) return 'no-data';
-  if (done === total) return 'complete';
+type StateInput = {
+  total: number;
+  workTotal: number;
+  workDone: number;
+  gatesTotal: number;
+  gatesMet: number;
+  overdue: number;
+  wip: number;
+  isOverridden: boolean;
+  progressPct: number;
+};
+
+/** A hand-entered override must never draw past the end of its bar. */
+function clampPct(value: number): number {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function stateFor(r: StateInput): ModuleState {
+  // An override is the team reporting progress before loading a workbook —
+  // the whole reason the column exists. Calling that "no records" printed an
+  // em-dash above a bar filled to the number the PM had just typed.
+  if (r.total === 0) {
+    if (!r.isOverridden) return 'no-data';
+    return r.progressPct >= 100 ? 'complete' : 'on-track';
+  }
+  // Done means both populations are finished: the work is delivered and the
+  // acceptance criteria are signed off.
+  if (r.workDone === r.workTotal && r.gatesMet === r.gatesTotal) return 'complete';
   // A late module is the louder signal, so it outranks "nothing started yet".
-  if (overdue > 0) return 'behind';
-  if (done === 0 && wip === 0) return 'not-started';
+  // Lateness always comes from the records, never from the override — a PM
+  // reporting 100% does not make an overdue row on time.
+  if (r.overdue > 0) return 'behind';
+  if (r.workDone === 0 && r.wip === 0) return 'not-started';
   return 'on-track';
 }
 
 /**
  * One module's figures.
  *
- * `override` is the project's stored pct_<module>. Zero means "auto" in this
- * schema — supabase-phase7.sql reset every project to 0 precisely so the app
- * would derive the number — so only a value above zero wins.
+ * Work and gates are counted separately, because they are structurally
+ * different populations — see lib/task-kind.ts. Blending them is what produced
+ * the "Avg Progress 6%" this codebase already diagnosed and removed: on the
+ * live programme the two honest figures are work 37/356 = 10% and gates
+ * 5/323 = 2%, and 6% is neither. Worse, a blended figure moves when a gate is
+ * added and no work changes. Percentage, pending, overdue and unscheduled all
+ * come from work; gates get their own met/total ratio.
+ *
+ * `override` is the project's stored pct_<module>, where 0 means "auto".
+ * (supabase-phase6.sql created these columns with `default 0`; nothing has
+ * ever reset existing rows, and components/AddProjectModal.tsx writes whatever
+ * a PM types, so a non-zero value here is a deliberate entry.) It replaces the
+ * derived percentage but never the lateness — a PM reporting 100% does not
+ * make an overdue row on time.
  */
 export function moduleProgress(
   module: ModuleKey,
@@ -156,28 +202,39 @@ export function moduleProgress(
   today: string,
   override: number | null | undefined,
 ): ModuleProgress {
-  const total = tasks.length;
-  const done = tasks.filter((t) => t.kanban_status === 'Done').length;
-  const open = tasks.filter((t) => t.kanban_status !== 'Done');
-  const overdue = open.filter((t) => !!t.due_date && isPast(t.due_date, today)).length;
-  const wip = tasks.filter((t) => t.kanban_status === 'In Progress').length;
+  const { work, gates } = partitionByKind(tasks);
+  const openWork = work.filter((t) => t.kanban_status !== 'Done');
+
+  const workTotal = work.length;
+  const workDone = work.length - openWork.length;
+  const overdue = openWork.filter((t) => !!t.due_date && isPast(t.due_date, today)).length;
+  const wip = work.filter((t) => t.kanban_status === 'In Progress').length;
+
   const isOverridden = override != null && override > 0;
+  const progressPct = isOverridden
+    ? clampPct(override)
+    : workTotal === 0
+      ? 0
+      : Math.round((workDone / workTotal) * 100);
+
+  const figures = {
+    total: tasks.length,
+    workTotal,
+    workDone,
+    gatesTotal: gates.length,
+    gatesMet: gates.filter((t) => t.kanban_status === 'Done').length,
+    overdue,
+    wip,
+    isOverridden,
+    progressPct,
+  };
 
   return {
     module,
-    total,
-    done,
-    progressPct: isOverridden
-      ? Math.round(override)
-      : total === 0
-        ? 0
-        : Math.round((done / total) * 100),
-    isOverridden,
-    pending: open.length,
-    overdue,
-    unscheduled: open.filter((t) => !t.due_date).length,
-    wip,
-    state: stateFor(total, done, overdue, wip),
+    ...figures,
+    pending: openWork.length,
+    unscheduled: openWork.filter((t) => !t.due_date).length,
+    state: stateFor(figures),
   };
 }
 

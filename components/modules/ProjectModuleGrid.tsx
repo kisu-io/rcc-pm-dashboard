@@ -43,15 +43,23 @@ function ModuleTile({ row }: { row: ModuleProgress }) {
         <span className="text-xs font-medium text-slate-700 truncate" title={label.vn}>
           {label.en}
         </span>
-        <span className="text-xs font-semibold tabular-nums text-slate-900 shrink-0">
+        <span
+          className="text-xs font-semibold tabular-nums text-slate-900 shrink-0"
+          title={row.isOverridden ? 'Entered by the PM, not derived from records' : undefined}
+        >
           {empty ? '—' : `${row.progressPct}%`}
+          {row.isOverridden && <span className="text-slate-400 font-normal">*</span>}
         </span>
       </div>
 
+      {/* Gated on `empty` like the text — the two halves must never disagree. */}
       <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden mt-1" aria-hidden="true">
         <div
           className="h-full rounded-full"
-          style={{ width: `${row.progressPct}%`, background: MODULE_COLORS[row.module] }}
+          style={{
+            width: empty ? '0%' : `${row.progressPct}%`,
+            background: MODULE_COLORS[row.module],
+          }}
         />
       </div>
 

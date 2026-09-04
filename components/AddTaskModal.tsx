@@ -3,8 +3,19 @@ import { useState } from 'react';
 import { supabase, Project } from '@/lib/supabase';
 import { checkWrite } from '@/lib/writes';
 import { X, Plus, Loader2 } from 'lucide-react';
+import { MODULE_ORDER, MODULE_LABELS } from '@/lib/modules';
 
-const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
+/*
+ * `module` is the owning team; `phase` is the department inside it. The two
+ * were previously conflated: this modal offered a fixed phase list
+ * ('Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover')
+ * whose names collided with the module taxonomy, so a PM filing a task under
+ * phase "Design" would watch the Design module keep reading "no records" —
+ * and nothing here set `module` at all, which left five of the six modules
+ * unfillable through the app. Phase is free text because the live programme
+ * uses 16 department names of its own (Engineering, Culinary, Housekeeping…)
+ * that no fixed list would have predicted.
+ */
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
 
@@ -18,7 +29,8 @@ export default function AddTaskModal({
   const [form, setForm] = useState({
     project_id: projects[0]?.id || '',
     title: '',
-    phase: 'Construction',
+    module: 'operation',
+    phase: '',
     zone: '',
     owner: '',
     priority: 'Medium',
@@ -40,7 +52,8 @@ export default function AddTaskModal({
     const payload = {
       project_id: form.project_id,
       title: form.title.trim(),
-      phase: form.phase,
+      module: form.module,
+      phase: form.phase.trim() || null,
       zone: form.zone || null,
       owner: form.owner || null,
       priority: form.priority,
@@ -62,7 +75,7 @@ export default function AddTaskModal({
     // Reset + close
     setForm({
       project_id: projects[0]?.id || '',
-      title: '', phase: 'Construction', zone: '', owner: '',
+      title: '', module: form.module, phase: '', zone: '', owner: '',
       priority: 'Medium', kanban_status: 'To Do',
       planned_start: '', planned_end: '', due_date: '', constraint_note: '',
     });
@@ -111,12 +124,19 @@ export default function AddTaskModal({
                 <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inputCls} required placeholder="e.g. MEP rough-in" />
               </div>
 
+              <div>
+                <label className={labelCls}>Module * (Hạng mục)</label>
+                <select value={form.module} onChange={(e) => setForm({ ...form, module: e.target.value })} className={inputCls} required>
+                  {MODULE_ORDER.map((m) => (
+                    <option key={m} value={m}>{MODULE_LABELS[m].en} — {MODULE_LABELS[m].vn}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className={labelCls}>Phase</label>
-                  <select value={form.phase} onChange={(e) => setForm({ ...form, phase: e.target.value })} className={inputCls}>
-                    {PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <label className={labelCls}>Department (Bộ phận)</label>
+                  <input value={form.phase} onChange={(e) => setForm({ ...form, phase: e.target.value })} className={inputCls} placeholder="e.g. Engineering" />
                 </div>
                 <div>
                   <label className={labelCls}>Zone</label>

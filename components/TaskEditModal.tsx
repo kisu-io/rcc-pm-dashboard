@@ -3,9 +3,15 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { supabase, Task, Project } from '@/lib/supabase';
 import { checkWrite } from '@/lib/writes';
 import { statusColor } from '@/lib/schedule-utils';
+import { MODULE_ORDER, MODULE_LABELS } from '@/lib/modules';
 import { X, Loader2, Check, Trash2, ChevronDown, AlertCircle } from 'lucide-react';
 
-const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
+/*
+ * See the note in AddTaskModal: `module` is the owning team, `phase` is the
+ * department inside it. The fixed phase list that used to sit here collided by
+ * name with the module taxonomy and matched none of the 16 department values
+ * the live programme actually uses.
+ */
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
 
@@ -83,7 +89,8 @@ export default function TaskEditModal({
   const [form, setForm] = useState({
     project_id: task.project_id,
     title: task.title,
-    phase: task.phase || 'Construction',
+    module: task.module || 'operation',
+    phase: task.phase || '',
     zone: task.zone || '',
     owner: task.owner || '',
     priority: task.priority,
@@ -130,7 +137,8 @@ export default function TaskEditModal({
     const payload = {
       project_id: form.project_id,
       title: form.title.trim(),
-      phase: form.phase || null,
+      module: form.module,
+      phase: form.phase.trim() || null,
       zone: form.zone || null,
       owner: form.owner || null,
       priority: form.priority,
@@ -259,17 +267,30 @@ export default function TaskEditModal({
                   </select>
                 </SelectShell>
               </Field>
-              <Field label="Phase" htmlFor={fid('phase')}>
+              <Field label="Module" htmlFor={fid('module')}>
                 <SelectShell>
                   <select
-                    id={fid('phase')}
-                    value={form.phase}
-                    onChange={(e) => setForm({ ...form, phase: e.target.value })}
+                    id={fid('module')}
+                    value={form.module}
+                    onChange={(e) => setForm({ ...form, module: e.target.value })}
                     className={SELECT_CLS}
                   >
-                    {PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    {MODULE_ORDER.map((m) => (
+                      <option key={m} value={m}>
+                        {MODULE_LABELS[m].en} — {MODULE_LABELS[m].vn}
+                      </option>
+                    ))}
                   </select>
                 </SelectShell>
+              </Field>
+              <Field label="Department" htmlFor={fid('phase')}>
+                <input
+                  id={fid('phase')}
+                  value={form.phase}
+                  onChange={(e) => setForm({ ...form, phase: e.target.value })}
+                  className={CONTROL_CLS}
+                  placeholder="e.g. Engineering"
+                />
               </Field>
             </div>
 

@@ -29,22 +29,29 @@ export default function ModuleCard({ row }: { row: ModuleProgress }) {
         </span>
       </div>
 
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-3xl font-bold tabular-nums text-slate-900">
           {empty ? '—' : `${row.progressPct}%`}
         </span>
         {!empty && (
           <span className="text-xs text-slate-500 tabular-nums">
-            {row.done} / {row.total} done
+            {row.isOverridden
+              ? 'entered by PM'
+              : `${row.workDone} / ${row.workTotal} work done`}
           </span>
         )}
       </div>
 
+      {/*
+        Width is gated on the same flag as the text above it. Previously the
+        label read "—" while this bar was sized from an override, so the card
+        showed "no records" over a 95%-filled bar.
+      */}
       <div className="h-2 w-full rounded-sm bg-slate-100 overflow-hidden" aria-hidden="true">
         <div
           className="h-full rounded-sm transition-[width]"
           style={{
-            width: `${row.progressPct}%`,
+            width: empty ? '0%' : `${row.progressPct}%`,
             background: MODULE_COLORS[row.module],
           }}
         />
@@ -61,8 +68,16 @@ export default function ModuleCard({ row }: { row: ModuleProgress }) {
             <span className="text-red-600 font-semibold">{row.overdue} overdue</span>
           )}
           {row.unscheduled > 0 && (
-            <span className="text-slate-500" title="Open with no date set">
+            <span className="text-slate-500" title="Open work with no date set">
               {row.unscheduled} undated
+            </span>
+          )}
+          {row.gatesTotal > 0 && (
+            <span
+              className="text-slate-500"
+              title="Opening-acceptance criteria. Normally undated until someone commits to a date."
+            >
+              {row.gatesMet} / {row.gatesTotal} gates
             </span>
           )}
         </div>
