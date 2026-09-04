@@ -9,8 +9,12 @@ export const demoProjects: Project[] = [
     location: 'HCMC',
     status: 'In Progress',
     progress_pct: 0, // 0 = auto-calc from Done/total tasks
-    budget: 5e9,
-    spent: 1.75e9,
+    // Matches production, where no budget has been set and cost_entries is
+    // empty. Keeping a mock 5e9 here meant dev and CI exercised a code path
+    // real users never hit, which is how the project page kept rendering
+    // "Budget used 0% / Remaining 0" unnoticed.
+    budget: null,
+    spent: 0,
     start_date: '2026-06-01',
     target_end: '2026-12-31',
     pm: 'Mr Phán',

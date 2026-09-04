@@ -7,6 +7,7 @@ import {
   FileText, Wallet, Boxes, Users, HardHat, Menu, X, CalendarDays, LogOut, ShieldAlert, ScrollText,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import type { ModuleAvailability } from '@/lib/data-server';
 
 /**
  * Ordered by how much this programme's data actually supports.
@@ -26,11 +27,25 @@ const nav = [
   { href: '/documents', label: 'Documents', icon: FileText },
 ];
 
-/** Reachable, just not promoted. */
-const secondaryNav = [
+/**
+ * Reachable, just not promoted — and Budget and Materials only appear once
+ * they have something behind them.
+ *
+ * `projects.budget` is null and both `cost_entries` and `materials` are empty,
+ * so those pages showed counters of `0` and a table of em-dashes: "we have
+ * spent nothing" rather than "no budget has been set". They return on their
+ * own as soon as a budget or a first row exists, and both URLs still work if
+ * someone navigates straight to them.
+ */
+const secondaryNav: {
+  href: string;
+  label: string;
+  icon: typeof CalendarDays;
+  needs?: keyof ModuleAvailability;
+}[] = [
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { href: '/budget', label: 'Budget & Cost', icon: Wallet },
-  { href: '/materials', label: 'Materials', icon: Boxes },
+  { href: '/budget', label: 'Budget & Cost', icon: Wallet, needs: 'budget' },
+  { href: '/materials', label: 'Materials', icon: Boxes, needs: 'materials' },
 ];
 
 const adminNav = [
@@ -38,7 +53,8 @@ const adminNav = [
   { href: '/admin/activity', label: 'Admin · Activity', icon: ScrollText },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ modules }: { modules: ModuleAvailability }) {
+  const visibleSecondary = secondaryNav.filter((n) => !n.needs || modules[n.needs]);
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const { user, role, signOut } = useAuth();
@@ -104,8 +120,12 @@ export default function Sidebar() {
               </Link>
             );
           })}
-          <div className="border-t border-white/10 mt-2 pt-3 space-y-1">
-            {secondaryNav.map(({ href, label, icon: Icon }) => {
+          <div
+            className={`border-t border-white/10 mt-2 pt-3 space-y-1 ${
+              visibleSecondary.length === 0 ? 'hidden' : ''
+            }`}
+          >
+            {visibleSecondary.map(({ href, label, icon: Icon }) => {
               const active = path === href;
               return (
                 <Link
