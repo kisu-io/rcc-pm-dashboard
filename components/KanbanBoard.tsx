@@ -34,6 +34,26 @@ const COL_COLOR: Record<string, string> = {
  */
 const CARDS_PER_PAGE = 40;
 
+/**
+ * Column count → grid class, spelled out because Tailwind scans source text and
+ * would purge an interpolated `md:grid-cols-${n}`.
+ *
+ * The board is a grid rather than a scrolling flex track: every column shares
+ * the width and shrinks to fit, so the whole board is visible at once. It used
+ * to be `flex overflow-x-auto` with `shrink-0` wrappers over a
+ * `min-w-[80vw]/300px/260px` floor, which guaranteed it was wider than the
+ * viewport and had to be scrolled sideways — on a phone *and* on a 1440px
+ * desktop. Below `md` the columns stack vertically, since four readable
+ * columns do not fit on a 390px screen and sideways swiping is what we are
+ * removing.
+ */
+const COLUMN_GRID: Record<number, string> = {
+  1: 'md:grid-cols-1',
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4',
+};
+
 function Card({ task, projName, projects, onEdit, onSaved }: {
   task: Task;
   projName: string;
@@ -160,10 +180,17 @@ function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
   const visible = tasks.slice(0, shown);
 
   return (
-    <div className="flex-1 min-w-[80vw] sm:min-w-[300px] md:min-w-[260px]">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: colColor }} />
-        <h3 className="font-semibold text-sm">{status}</h3>
+    /* min-w-0 is load-bearing: a grid child defaults to min-width:auto, so it
+       refuses to shrink below its content and pushes the board past the
+       viewport. That, plus the old shrink-0 wrapper and a min-w floor, is what
+       forced the whole board to scroll sideways. */
+    <div className="min-w-0">
+      <div className="flex items-center gap-x-2 gap-y-1 mb-3 flex-wrap">
+        <span
+          className="w-2.5 h-2.5 rounded-full shrink-0"
+          style={{ background: colColor }}
+        />
+        <h3 className="font-semibold text-sm truncate">{status}</h3>
         <span className="text-sm text-slate-500 tabular-nums">{tasks.length}</span>
         {overdue > 0 && (
           <span className="text-xs font-medium text-red-700 bg-red-50 rounded px-1.5 py-0.5 ml-auto tabular-nums">
@@ -289,18 +316,17 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
         </div>
       )}
       <DndContext sensors={canEdit ? sensors : undefined} onDragEnd={onDragEnd}>
-        <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory">
+        <div className={`grid gap-3 md:gap-4 pb-4 grid-cols-1 ${COLUMN_GRID[columns.length] ?? 'md:grid-cols-4'}`}>
           {columns.map((status) => (
-            <div key={status} className="snap-start shrink-0">
-              <Column
-                status={status}
-                tasks={tasks.filter((t) => t.kanban_status === status)}
-                projMap={projMap}
-                projects={projects}
-                onEdit={setEditing}
-                onSaved={onSaved}
-              />
-            </div>
+            <Column
+              key={status}
+              status={status}
+              tasks={tasks.filter((t) => t.kanban_status === status)}
+              projMap={projMap}
+              projects={projects}
+              onEdit={setEditing}
+              onSaved={onSaved}
+            />
           ))}
         </div>
       </DndContext>
