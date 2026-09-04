@@ -14,4 +14,18 @@ grep -q "$PWD/deploy/rcc/backup.sh" "$plist" || { echo "FAIL: plist does not poi
 grep -q '<key>Hour</key><integer>2</integer>' "$plist" || { echo "FAIL: not scheduled at 02:00"; exit 1; }
 [ -d "$agents/backups" ] || { echo "FAIL: BACKUP_DIR was not created"; exit 1; }
 
+# The launchd job gets no login shell, so the plist PATH is the only way it can
+# find the docker CLI. Docker Desktop installs it under ~/.docker/bin on current
+# versions; a hard-coded PATH silently breaks the 02:00 run.
+docker_dir=$(dirname "$(command -v docker)")
+plist_path=$(sed -n 's|.*<key>PATH</key><string>\(.*\)</string>.*|\1|p' "$plist")
+case ":$plist_path:" in
+  *":$docker_dir:"*) ;;
+  *) echo "FAIL: plist PATH ($plist_path) does not contain the docker CLI directory $docker_dir"; exit 1;;
+esac
+case ":$plist_path:" in
+  *":$HOME/.docker/bin:"*) ;;
+  *) echo "FAIL: plist PATH ($plist_path) does not contain \$HOME/.docker/bin"; exit 1;;
+esac
+
 echo "OK: backup schedule"

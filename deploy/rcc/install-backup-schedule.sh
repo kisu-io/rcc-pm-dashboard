@@ -14,6 +14,16 @@ AGENTS_DIR="${LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 label=vn.rcc.erp-backup
 plist="$AGENTS_DIR/$label.plist"
 
+# launchd starts the job with no login shell, so it never reads the profile
+# that puts docker on PATH. Resolve it here instead of guessing: current Docker
+# Desktop installs the CLI under ~/.docker/bin, older ones under /usr/local/bin.
+docker_bin="$(command -v docker || true)"
+[ -n "$docker_bin" ] || {
+  echo "docker is not on PATH — install Docker Desktop and open a shell where \`docker\` works, then re-run this script" >&2
+  exit 1
+}
+docker_dir="$(dirname "$docker_bin")"
+
 mkdir -p "$BACKUP_DIR" "$AGENTS_DIR"
 
 cat > "$plist" <<EOF
@@ -29,7 +39,7 @@ cat > "$plist" <<EOF
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>PATH</key><string>$docker_dir:$HOME/.docker/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
     <key>BACKUP_DIR</key><string>$BACKUP_DIR</string>
   </dict>
   <key>StartCalendarInterval</key>
