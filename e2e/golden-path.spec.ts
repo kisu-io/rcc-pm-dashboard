@@ -7,9 +7,24 @@ import { test, expect } from '@playwright/test';
  * Tests the UI rendering layer without needing a real backend or auth.
  */
 
-test('home loads with dashboard heading', async ({ page }) => {
+test('home loads the opening-readiness screen', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1').first()).toContainText(/dashboard/i);
+  await expect(page.locator('h1').first()).toContainText(/opening readiness/i);
+  // The headline is gate completion, not a blended progress percentage.
+  await expect(page.getByText(/opening gates signed off|no readiness gates/i)).toBeVisible({
+    timeout: 15_000,
+  });
+  // The department ledger replaces the old KPI strip and S-curve.
+  await expect(page.getByText(/departments not clear to open/i)).toBeVisible();
+});
+
+test('the look-ahead never lists work that is already overdue', async ({ page }) => {
+  await page.goto('/');
+  const panel = page.locator('section').filter({ hasText: 'Next 14 days' }).first();
+  await expect(panel).toBeVisible({ timeout: 15_000 });
+  // The old widget had no lower date bound, so it surfaced the most overdue
+  // rows in the table. Nothing in this panel may read as past due.
+  await expect(panel.getByText(/quá hạn|overdue/i)).toHaveCount(0);
 });
 
 test('projects page lists demo projects', async ({ page }) => {
@@ -25,6 +40,16 @@ test('tasks kanban shows columns', async ({ page }) => {
   await expect(page.getByText(/done/i).first()).toBeVisible();
 });
 
+test('tasks page separates schedulable work from readiness gates', async ({ page }) => {
+  await page.goto('/tasks');
+  // Work is the default view; gates get a checklist rather than a Kanban column.
+  const work = page.getByRole('button', { name: /^Work \(/ });
+  const gates = page.getByRole('button', { name: /^Readiness gates \(/ });
+  await expect(work).toBeVisible({ timeout: 15_000 });
+  await expect(gates).toBeVisible();
+  await expect(work).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('budget page renders with total committed', async ({ page }) => {
   await page.goto('/budget');
   await expect(page.getByText(/total committed/i)).toBeVisible({ timeout: 15_000 });
@@ -37,9 +62,13 @@ test('materials page shows heading', async ({ page }) => {
   await expect(page.locator('h1')).toContainText(/materials/i);
 });
 
-test('gantt page renders', async ({ page }) => {
+test('schedule page renders a Gantt when tasks carry start dates', async ({ page }) => {
   await page.goto('/gantt');
-  await expect(page.locator('h1')).toContainText(/gantt/i);
+  await expect(page.locator('h1')).toContainText(/schedule/i);
+  // The demo fixtures do populate planned_start, so the Gantt path is the one
+  // under test here. Against the real programme (planned_start null on every
+  // row) the route falls back to the month grid instead.
+  await expect(page.getByText(/gantt timeline/i)).toBeVisible({ timeout: 15_000 });
 });
 
 test('calendar page renders', async ({ page }) => {
@@ -47,9 +76,10 @@ test('calendar page renders', async ({ page }) => {
   await expect(page.locator('h1')).toBeVisible({ timeout: 15_000 });
 });
 
-test('team page renders', async ({ page }) => {
+test('roles page renders', async ({ page }) => {
   await page.goto('/team');
-  await expect(page.locator('h1')).toContainText(/team/i);
+  // Named "Roles" because tasks.owner holds role codes, not people.
+  await expect(page.locator('h1')).toContainText(/roles/i);
 });
 
 test('documents page renders', async ({ page }) => {

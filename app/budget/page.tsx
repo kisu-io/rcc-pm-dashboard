@@ -2,20 +2,22 @@ import { getProjects, getTasks, getCostEntries } from '@/lib/data-server';
 import { formatVND } from '@/lib/data';
 import CostEntriesTable from '@/components/CostEntriesTable';
 import { Wallet, TrendingDown, TrendingUp, AlertTriangle } from 'lucide-react';
+import { projectStatusBadge } from '@/lib/ui';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_BADGE: Record<string, string> = {
-  'In Progress': 'bg-blue-100 text-blue-700',
-  'On Hold': 'bg-amber-100 text-amber-700',
-  'Complete': 'bg-green-100 text-green-700',
-  'Not Started': 'bg-slate-100 text-slate-600',
-  'Pending': 'bg-purple-100 text-purple-700',
-  'Upcoming': 'bg-cyan-100 text-cyan-700',
-};
-
 export default async function BudgetPage() {
   const [projects, tasks, costEntries] = await Promise.all([getProjects(), getTasks(), getCostEntries()]);
+
+  /**
+   * Whether there is a budget to report on at all.
+   *
+   * With `budget` null on every project the page used to render "Total
+   * committed 0 · Spent 0 · Remaining 0 · Utilization 0%" and a table row of
+   * em-dashes, which reads as "we have spent nothing" rather than "no budget
+   * has been set". Those are very different statements to put in front of a PM.
+   */
+  const hasBudget = projects.some((p) => p.budget != null);
 
   const totalBudget = projects.reduce((s, p) => s + (p.budget || 0), 0);
   const totalSpent = projects.reduce((s, p) => s + p.spent, 0);
@@ -56,8 +58,19 @@ export default async function BudgetPage() {
         </div>
       )}
 
+      {!hasBudget && (
+        <div className="bg-white rounded-xl p-8 shadow-sm text-center">
+          <Wallet size={32} className="mx-auto mb-3 text-slate-300" />
+          <p className="text-base font-medium">No budget set for this programme</p>
+          <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+            Chưa thiết lập ngân sách. Set a budget on the project to track commitment and spend
+            here. Cost entries can be recorded below in the meantime.
+          </p>
+        </div>
+      )}
+
       {/* Top stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+      <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 ${hasBudget ? '' : 'hidden'}`}>
         <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
           <div className="flex items-center gap-2 text-[10px] text-slate-400 uppercase"><Wallet size={12} /> Total committed</div>
           <div className="text-lg md:text-2xl font-bold mt-1">{formatVND(totalBudget)}</div>
@@ -80,7 +93,11 @@ export default async function BudgetPage() {
       </div>
 
       {/* Per-project table */}
-      <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm overflow-x-auto">
+      <div
+        className={`bg-white rounded-xl p-3 md:p-4 shadow-sm overflow-x-auto ${
+          hasBudget ? '' : 'hidden'
+        }`}
+      >
         <h3 className="font-semibold text-sm mb-3">Per-project breakdown</h3>
         <table className="w-full text-xs md:text-sm min-w-[640px]">
           <thead>
@@ -98,7 +115,7 @@ export default async function BudgetPage() {
                 <tr key={p.id} className="border-t border-slate-100">
                   <td className="py-2 font-medium">{p.name}</td>
                   <td>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${STATUS_BADGE[p.status] || 'bg-slate-100'}`}>{p.status}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${projectStatusBadge(p.status)}`}>{p.status}</span>
                   </td>
                   <td className="text-slate-600">{formatVND(p.budget)}</td>
                   <td className="text-amber-600">{formatVND(p.spent)}</td>

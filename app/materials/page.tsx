@@ -26,8 +26,25 @@ export default async function MaterialsPage() {
         <p className="text-xs md:text-sm text-slate-500">Material & equipment tracking — lead times, status, delivery</p>
       </div>
 
+      {/* Four zero counters and an empty table read as "nothing is late"; they
+          should read "nothing is tracked". */}
+      {stats.total === 0 && (
+        <div className="bg-white rounded-xl p-8 shadow-sm text-center">
+          <Boxes size={32} className="mx-auto mb-3 text-slate-300" />
+          <p className="text-base font-medium">No materials tracked yet</p>
+          <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+            Chưa theo dõi vật tư. Add a material below to track its supplier, lead time and
+            delivery against the opening date.
+          </p>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+      <div
+        className={`grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 ${
+          stats.total === 0 ? 'hidden' : ''
+        }`}
+      >
         <div className="bg-white rounded-xl p-3 md:p-4 shadow-sm">
           <div className="flex items-center gap-2 text-[10px] text-slate-400 uppercase"><Boxes size={12} /> Total</div>
           <div className="text-lg md:text-2xl font-bold mt-1">{stats.total}</div>
@@ -63,12 +80,9 @@ export default async function MaterialsPage() {
       {/* Materials table (client — add/edit/delete gated to editors) */}
       <MaterialsTable materials={materials} projects={projects} />
 
-      {/* Hint to link constraints */}
-      <div className="bg-white rounded-xl p-4 shadow-sm">
-        <h3 className="font-semibold text-sm mb-2 flex items-center gap-2"><AlertTriangle size={14} /> Link material delays to task constraints</h3>
-        <p className="text-xs text-slate-500 mb-3">When a material is delayed, you can update the related task's <code className="px-1 bg-slate-100 rounded">constraint_note</code> to reference it.</p>
-        <Link href="/tasks" className="text-xs text-blue-600 hover:underline">Open Kanban →</Link>
-      </div>
+      {/* The permanent how-to card that used to sit here explained how to copy a
+          material delay into a task's constraint_note. Documentation belongs in
+          the repo, not in a card that occupies the page on every visit. */}
     </div>
   );
 }

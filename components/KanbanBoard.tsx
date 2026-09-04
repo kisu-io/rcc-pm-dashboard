@@ -6,22 +6,33 @@ import {
 } from '@dnd-kit/core';
 import { Task, Project, supabase } from '@/lib/supabase';
 import TaskEditModal from './TaskEditModal';
-import {
-  ScheduleTask, phaseColor, priorityColor, isMilestone, isExpress,
-  formatDate, daysBetween, barColor,
-  MILESTONE_COLOR, EXPRESS_COLOR,
-} from '@/lib/schedule-utils';
-import { Flag, Zap, AlertTriangle, Clock, User, MapPin } from 'lucide-react';
+import { phaseColor, priorityColor, formatDate } from '@/lib/schedule-utils';
+import { AlertTriangle, Clock, User, MapPin } from 'lucide-react';
 import { checkWrite } from '@/lib/writes';
 import { useCanEdit } from '@/lib/useRole';
 
-const COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
+/** Every column the board can show, in order. */
+const ALL_COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
+
+/** Columns that always appear, because you must be able to drag into them. */
+const REQUIRED_COLUMNS = new Set(['To Do', 'In Progress', 'Done']);
+
 const COL_COLOR: Record<string, string> = {
   'To Do': '#94a3b8',
   'In Progress': '#2563eb',
-  'Review': '#a855f7',
-  'Done': '#22c55e',
+  Review: '#a855f7',
+  Done: '#22c55e',
 };
+
+/**
+ * Cards rendered per column before a "show more" button.
+ *
+ * Every card registers a dnd-kit draggable, so an unbounded column of 602 of
+ * them meant 602 hook registrations and 602 card subtrees on first paint — on
+ * a phone, on site. Dragging needs a visible target, not the whole backlog, so
+ * the column renders a window and grows on request.
+ */
+const CARDS_PER_PAGE = 40;
 
 function Card({ task, projName, projects, onEdit, onSaved }: {
   task: Task;
@@ -35,10 +46,7 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
     ? { transform: `translate(${transform.x}px, ${transform.y}px)`, opacity: isDragging ? 0.5 : 1, touchAction: 'none' as const, borderLeft: `4px solid ${phaseColor(task.phase)}` }
     : { touchAction: 'none' as const, borderLeft: `4px solid ${phaseColor(task.phase)}` };
 
-  const ms = isMilestone(task as ScheduleTask);
-  const ex = isExpress(task as ScheduleTask);
   const phColor = phaseColor(task.phase);
-  const dur = daysBetween(task.planned_start, task.planned_end);
   const colColor = COL_COLOR[task.kanban_status] || '#94a3b8';
   const pColor = priorityColor(task.priority);
 
@@ -57,57 +65,60 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
         <div className="flex items-center justify-between mb-1 gap-2">
           <div className="flex items-center gap-1 min-w-0">
             <span
-              className="text-[9px] px-1.5 py-0.5 rounded-full truncate text-white font-medium"
+              className="text-xs px-2 py-0.5 rounded-full truncate text-white font-medium"
               style={{ background: phColor }}
             >
               {task.phase || '—'}
             </span>
-            {ms && (
-              <span className="text-[9px] px-1 py-0.5 rounded-full text-white font-bold flex items-center gap-0.5" style={{ background: MILESTONE_COLOR }}>
-                <Flag size={8} /> MS
-              </span>
-            )}
-            {ex && !ms && (
-              <span className="text-[9px] px-1 py-0.5 rounded-full text-white font-bold flex items-center gap-0.5" style={{ background: EXPRESS_COLOR }}>
-                <Zap size={8} /> EX
-              </span>
-            )}
           </div>
-          <span className="text-[10px] font-bold shrink-0" style={{ color: pColor }}>{task.priority}</span>
+          <span className="text-xs font-semibold shrink-0" style={{ color: pColor }}>
+            {task.priority}
+          </span>
         </div>
 
         {/* Title */}
         <div className="text-sm font-medium break-words leading-snug">{task.title}</div>
 
-        {/* Owner + zone */}
-        <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-          <span className="flex items-center gap-0.5">
-            <User size={10} className="text-slate-400" /> {task.owner || '—'}
+        {/* Owner + section */}
+        <div className="text-xs text-slate-600 mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+          <span className="flex items-center gap-1">
+            <User size={12} className="text-slate-400" /> {task.owner || 'unassigned'}
           </span>
           {task.zone && (
-            <span className="flex items-center gap-0.5">
-              <MapPin size={10} className="text-slate-400" /> {task.zone}
+            <span className="flex items-center gap-1 min-w-0">
+              <MapPin size={12} className="text-slate-400 shrink-0" />
+              <span className="truncate">{task.zone}</span>
             </span>
           )}
         </div>
 
-        {/* Dates + duration */}
-        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 flex-wrap">
-          <Clock size={10} className="text-slate-400" />
-          <span>{formatDate(task.planned_start)} → {formatDate(task.planned_end)}</span>
-          {dur && <span className="text-slate-500 font-medium">· {dur}d</span>}
+        {/* Due date. Leads with the date that exists: planned_start is null on
+            every row in this programme, so the old "start → end" line rendered
+            as "— → 01 Aug 2026" on all 679 cards. */}
+        <div className="text-xs text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
+          <Clock size={12} className="text-slate-400" />
+          {task.due_date ? (
+            <span className="tabular-nums">Due {formatDate(task.due_date)}</span>
+          ) : (
+            <span className="text-slate-400">No date</span>
+          )}
+          {task.planned_start && task.planned_end && (
+            <span className="text-slate-400 tabular-nums">
+              · {formatDate(task.planned_start)} → {formatDate(task.planned_end)}
+            </span>
+          )}
         </div>
 
-        {/* Constraint / predecessors */}
+        {/* Constraint */}
         {task.constraint_note && (
-          <div className="text-[10px] text-amber-600 mt-1 break-words flex items-center gap-0.5">
-            <AlertTriangle size={9} /> Pred: {task.constraint_note}
+          <div className="text-xs text-amber-700 mt-1.5 break-words flex items-start gap-1">
+            <AlertTriangle size={12} className="shrink-0 mt-0.5" /> {task.constraint_note}
           </div>
         )}
 
-        {/* Notes (truncated) */}
+        {/* Notes */}
         {task.notes && (
-          <div className="text-[10px] text-slate-500 mt-1 break-words italic line-clamp-2">
+          <div className="text-xs text-slate-500 mt-1.5 break-words line-clamp-2">
             {task.notes}
           </div>
         )}
@@ -117,23 +128,9 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
           <div className="h-full transition-all" style={{ width: `${task.progress_pct}%`, background: colColor }} />
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1.5">
-          <span className="truncate">{projName}</span>
-          <span className={task.due_date ? 'font-medium text-slate-500' : ''}>
-            Due: {formatDate(task.due_date)}
-          </span>
-        </div>
       </div>
-      <EditOpener task={task} projects={projects} onEdit={onEdit} onSaved={onSaved} />
     </>
   );
-}
-
-function EditOpener({ task, projects, onEdit, onSaved }: {
-  task: Task; projects: Project[]; onEdit: (t: Task) => void; onSaved?: () => void;
-}) {
-  return null;
 }
 
 function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
@@ -145,35 +142,42 @@ function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
   onSaved?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const [shown, setShown] = useState(CARDS_PER_PAGE);
   const colColor = COL_COLOR[status] || '#94a3b8';
-  // Column stats
-  const msCount = tasks.filter((t) => isMilestone(t as ScheduleTask)).length;
-  const exCount = tasks.filter((t) => isExpress(t as ScheduleTask) && !isMilestone(t as ScheduleTask)).length;
-  const avgProgress = tasks.length > 0
-    ? Math.round(tasks.reduce((s, t) => s + (t.progress_pct || 0), 0) / tasks.length)
-    : 0;
+
+  // Reset the window when the filtered set changes, so a narrow filter does not
+  // leave a stale "show more" count behind.
+  useEffect(() => { setShown(CARDS_PER_PAGE); }, [tasks.length]);
+
+  // Overdue is the number worth showing here. The old header showed
+  // "avg {n}%", but progress_pct is an exact copy of kanban_status on every
+  // row, so it read 0% / 50% / 100% by definition — a restatement of the
+  // column's own name.
+  const overdue = tasks.filter(
+    (t) => t.kanban_status !== 'Done' && !!t.due_date && t.due_date < todayStr(),
+  ).length;
+
+  const visible = tasks.slice(0, shown);
+
   return (
-    <div className="flex-1 min-w-[72vw] sm:min-w-[280px] md:min-w-[240px]">
+    <div className="flex-1 min-w-[80vw] sm:min-w-[300px] md:min-w-[260px]">
       <div className="flex items-center gap-2 mb-3">
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: colColor }} />
         <h3 className="font-semibold text-sm">{status}</h3>
-        <span className="text-xs text-slate-400">({tasks.length})</span>
-        {msCount > 0 && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white font-medium flex items-center gap-0.5" style={{ background: MILESTONE_COLOR }}>
-            <Flag size={8} /> {msCount}
+        <span className="text-sm text-slate-500 tabular-nums">{tasks.length}</span>
+        {overdue > 0 && (
+          <span className="text-xs font-medium text-red-700 bg-red-50 rounded px-1.5 py-0.5 ml-auto tabular-nums">
+            {overdue} overdue
           </span>
-        )}
-        {exCount > 0 && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white font-medium flex items-center gap-0.5" style={{ background: EXPRESS_COLOR }}>
-            <Zap size={8} /> {exCount}
-          </span>
-        )}
-        {tasks.length > 0 && (
-          <span className="text-[9px] text-slate-400 ml-auto">avg {avgProgress}%</span>
         )}
       </div>
-      <div ref={setNodeRef} className={`space-y-3 min-h-[200px] rounded-xl p-2 transition ${isOver ? 'bg-blue-50' : 'bg-slate-100/50'}`}>
-        {tasks.map((t) => (
+      <div
+        ref={setNodeRef}
+        className={`space-y-3 min-h-[200px] rounded-xl p-2 transition ${
+          isOver ? 'bg-blue-50' : 'bg-slate-100/50'
+        }`}
+      >
+        {visible.map((t) => (
           <Card
             key={t.id}
             task={t}
@@ -183,9 +187,27 @@ function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
             onSaved={onSaved}
           />
         ))}
+        {tasks.length > shown && (
+          <button
+            type="button"
+            onClick={() => setShown((n) => n + CARDS_PER_PAGE)}
+            className="w-full text-sm font-medium text-blue-700 bg-white border border-slate-200 rounded-lg py-2.5 hover:bg-blue-50"
+          >
+            Show {Math.min(CARDS_PER_PAGE, tasks.length - shown)} more
+            <span className="text-slate-500 font-normal"> · {tasks.length - shown} left</span>
+          </button>
+        )}
       </div>
     </div>
   );
+}
+
+/** Local ISO day, for comparing against a date-only `due_date` string. */
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
 }
 
 export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
@@ -201,6 +223,17 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
   // Sync when parent passes new filtered tasks (filters changed)
   useEffect(() => { setTasks(initialTasks); }, [initialTasks]);
 
+  /**
+   * Show a column only if it is one you can drag into, or something is in it.
+   *
+   * "Review" is a status no row in this programme uses, so it rendered as a
+   * permanently empty fourth column — a quarter of the board's width, and a
+   * quarter of the horizontal swipe on a phone, spent on nothing.
+   */
+  const columns = ALL_COLUMNS.filter(
+    (c) => REQUIRED_COLUMNS.has(c) || tasks.some((t) => t.kanban_status === c),
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -210,7 +243,7 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
     const { active, over } = e;
     if (!over) return;
     const newStatus = over.id as string;
-    if (!COLUMNS.includes(newStatus)) return;
+    if (!ALL_COLUMNS.includes(newStatus)) return;
 
     const moved = tasks.find((t) => t.id === active.id);
     if (!moved || moved.kanban_status === newStatus) return;
@@ -257,7 +290,7 @@ export default function KanbanBoard({ initialTasks, projMap, projects = [] }: {
       )}
       <DndContext sensors={canEdit ? sensors : undefined} onDragEnd={onDragEnd}>
         <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 snap-x snap-mandatory">
-          {COLUMNS.map((status) => (
+          {columns.map((status) => (
             <div key={status} className="snap-start shrink-0">
               <Column
                 status={status}
