@@ -27,7 +27,9 @@
 -- falls back to 'operation', so the app and this migration deploy in either
 -- order. Same arrangement as task_kind in supabase-phase8.sql.
 --
--- Idempotent: safe to re-run.
+-- Idempotent: safe to re-run. Applied to production 2026-09-04:
+--   tasks.module   text not null default 'operation'  — 679 rows backfilled
+--   projects.pct_operation numeric(5,2) default 0
 
 -- ------------------------------------------------------------- tasks.module
 alter table tasks add column if not exists module text;
