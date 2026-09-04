@@ -22,6 +22,7 @@ const MS_PER_DAY = 86400000;
 
 export type ReadinessTask = ClassifiableTask & {
   id?: string;
+  project_id?: string | null;
   title?: string;
   phase?: string | null;
   owner?: string | null;
@@ -325,4 +326,83 @@ export function monthGrid(tasks: ReadinessTask[], today: string): MonthGrid {
     months,
     rows: rows.sort((a, b) => load(b) - load(a) || a.department.localeCompare(b.department)),
   };
+}
+
+// ------------------------------------------------------------------ portfolio
+
+export type PortfolioProject = {
+  id: string;
+  name: string;
+  status?: string | null;
+  target_end?: string | null;
+};
+
+export type ProjectReadiness = ProgrammeReadiness & {
+  projectId: string;
+  name: string;
+  status: string | null;
+  /** The worst state any of this project's departments is in. */
+  risk: ReadinessStatus;
+};
+
+/** Worst-first, so the project most likely to miss its opening sorts to the top. */
+const RISK_ORDER: ReadinessStatus[] = [
+  'not-mobilised',
+  'nothing-moved',
+  'behind',
+  'on-track',
+  'clear',
+];
+
+/**
+ * One readiness row per project.
+ *
+ * Every other function here takes a flat task list and aggregates it whole,
+ * which is correct once the caller has already scoped to a single programme.
+ * Across a portfolio that would be wrong twice over: it would add up gate
+ * counts from unrelated estates into one ratio, and it would fold each
+ * project's "Engineering" into a single shared department row. Opening
+ * readiness is only meaningful per programme, because each one opens on its
+ * own date.
+ *
+ * Tasks whose project_id matches no supplied project are ignored rather than
+ * silently attributed to the first one.
+ */
+export function portfolioReadiness(
+  projects: PortfolioProject[],
+  tasks: ReadinessTask[],
+  today: string,
+): ProjectReadiness[] {
+  const byProject = new Map<string, ReadinessTask[]>();
+  for (const t of tasks) {
+    if (!t.project_id) continue;
+    const bucket = byProject.get(t.project_id);
+    if (bucket) bucket.push(t);
+    else byProject.set(t.project_id, [t]);
+  }
+
+  const rows = projects.map((p) => {
+    const own = byProject.get(p.id) ?? [];
+    const programme = programmeReadiness(own, today, p.target_end ?? null);
+    const departments = departmentReadiness(own, today);
+    const risk =
+      RISK_ORDER.find((s) => departments.some((d) => d.status === s)) ?? 'clear';
+    return {
+      ...programme,
+      projectId: p.id,
+      name: p.name,
+      status: p.status ?? null,
+      risk,
+    };
+  });
+
+  return rows.sort((a, b) => {
+    const r = RISK_ORDER.indexOf(a.risk) - RISK_ORDER.indexOf(b.risk);
+    if (r !== 0) return r;
+    // Then by urgency: the nearest opening first, undated projects last.
+    const da = a.daysToOpening ?? Number.POSITIVE_INFINITY;
+    const db = b.daysToOpening ?? Number.POSITIVE_INFINITY;
+    if (da !== db) return da - db;
+    return a.name.localeCompare(b.name);
+  });
 }

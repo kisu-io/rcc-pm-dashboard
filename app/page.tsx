@@ -6,12 +6,14 @@ import {
   departmentReadiness,
   lookAhead,
   unscheduledByDepartment,
+  portfolioReadiness,
   isOpen,
 } from '@/lib/readiness';
 import { partitionByKind } from '@/lib/task-kind';
 import { projectStatusBadge } from '@/lib/ui';
 import ReadinessSummary from '@/components/readiness/ReadinessSummary';
 import DepartmentLedger from '@/components/readiness/DepartmentLedger';
+import PortfolioLedger from '@/components/readiness/PortfolioLedger';
 import {
   LookAheadList,
   UnscheduledQueue,
@@ -34,6 +36,32 @@ export const dynamic = 'force-dynamic';
  * What a pre-opening PM needs is: how much of "ready to open" is signed off,
  * which department will stop us, and who to call. In that order.
  */
+
+function PortfolioStat({
+  label,
+  value,
+  tone = 'neutral',
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  tone?: 'neutral' | 'critical';
+  hint?: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm">
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div
+        className={`text-2xl font-bold tabular-nums mt-1 ${
+          tone === 'critical' && Number(value) > 0 ? 'text-red-600' : 'text-slate-900'
+        }`}
+      >
+        {value}
+      </div>
+      {hint && <div className="text-xs text-slate-500 mt-1">{hint}</div>}
+    </div>
+  );
+}
 
 /** The date the programme is working towards. */
 function resolveOpeningDate(
@@ -62,8 +90,55 @@ export default async function OpeningReadinessPage() {
   ]);
 
   const today = todayISO();
-  const openingDate = resolveOpeningDate(projects, milestones);
 
+  /**
+   * With more than one programme, readiness has to stop at the project
+   * boundary. Each project opens on its own date, so a single "5 / 323 gates"
+   * would add up unrelated estates, and one department ledger would fold every
+   * project's "Engineering" into a single row. The portfolio view ranks
+   * projects by risk; the department detail lives on each project's page.
+   */
+  if (projects.length > 1) {
+    const portfolio = portfolioReadiness(projects, tasks, today);
+    const atRisk = portfolio.filter(
+      (p) => p.risk === 'not-mobilised' || p.risk === 'nothing-moved',
+    ).length;
+    const opening60 = portfolio.filter(
+      (p) => p.daysToOpening != null && p.daysToOpening >= 0 && p.daysToOpening <= 60,
+    ).length;
+
+    return (
+      <div className="space-y-5 md:space-y-6">
+        <header>
+          <h1 className="text-xl md:text-2xl font-bold">Opening Readiness</h1>
+          <p className="text-sm text-slate-500">
+            Mức độ sẵn sàng khai trương · {projects.length} programmes · {tasks.length} records
+          </p>
+        </header>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <PortfolioStat label="Programmes" value={projects.length} />
+          <PortfolioStat
+            label="At risk"
+            value={atRisk}
+            tone={atRisk > 0 ? 'critical' : 'neutral'}
+            hint="unmobilised or stalled"
+          />
+          <PortfolioStat label="Opening in 60 days" value={opening60} hint="sắp khai trương" />
+          <PortfolioStat
+            label="Work overdue"
+            value={portfolio.reduce((s, p) => s + p.workOverdue, 0)}
+            tone="critical"
+            hint={`of ${portfolio.reduce((s, p) => s + p.workOpen, 0)} open`}
+          />
+        </div>
+
+        <PortfolioLedger rows={portfolio} />
+      </div>
+    );
+  }
+
+  const openingDate = resolveOpeningDate(projects, milestones);
   const programme = programmeReadiness(tasks, today, openingDate);
   const departments = departmentReadiness(tasks, today);
   const { work } = partitionByKind(tasks);

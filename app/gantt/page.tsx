@@ -49,7 +49,26 @@ export default async function SchedulePage() {
               start dates and the Gantt appears here automatically.
             </p>
           </div>
-          <MonthGrid grid={monthGrid(tasks, today)} currentMonth={today.slice(0, 7)} />
+          {/* One grid per programme. Pooling them would fold every project's
+              "Engineering" into a single row against a shared month axis, and
+              those months only line up by accident — each project runs to its
+              own opening date. */}
+          {projects.length > 1 ? (
+            projects.map((p) => (
+              <section key={p.id} className="space-y-2">
+                <h2 className="text-base font-semibold">{p.name}</h2>
+                <MonthGrid
+                  grid={monthGrid(
+                    tasks.filter((t) => t.project_id === p.id),
+                    today,
+                  )}
+                  currentMonth={today.slice(0, 7)}
+                />
+              </section>
+            ))
+          ) : (
+            <MonthGrid grid={monthGrid(tasks, today)} currentMonth={today.slice(0, 7)} />
+          )}
         </>
       )}
     </div>
