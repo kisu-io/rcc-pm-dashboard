@@ -32,7 +32,11 @@ services:
       - "127.0.0.1:8080:80"
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned; bump deliberately with the runbook's "Deploying a new version".
+    # This container terminates the public path, so `latest` would let an
+    # unreviewed build swap itself in on any `up -d` — and Rollback, which
+    # only moves the git checkout, would not roll it back.
+    image: cloudflare/cloudflared:2026.8.3
     restart: unless-stopped
     profiles: ["public"]
     command: tunnel --no-autoupdate run

@@ -25,6 +25,9 @@ has 'OE_DEFAULT_REGISTRATION_ROLE: viewer'                      || fail "default
 has 'ALLOWED_ORIGINS: https://test\.example,http://localhost:8080' || fail "ALLOWED_ORIGINS must list the tunnel host and the loopback URL"
 has 'target: api'                                               || fail "backend no longer builds the api target locally"
 has 'dockerfile: deploy/docker/Dockerfile.frontend'             || fail "frontend no longer builds locally"
+# Both halves must hold and either failure is the same failure, so the
+# A && B || C shape is deliberate here.
+# shellcheck disable=SC2015
 has 'host_ip: 127\.0\.0\.1' && has 'published: "8080"'          || fail "frontend is not bound to 127.0.0.1:8080"
 has 'published: "80"'                                           && fail "port 80 is published"
 has 'published: "443"'                                          && fail "port 443 is published"
