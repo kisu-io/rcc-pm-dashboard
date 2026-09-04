@@ -1,12 +1,71 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { supabase, Task, Project } from '@/lib/supabase';
 import { checkWrite } from '@/lib/writes';
-import { X, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { statusColor } from '@/lib/schedule-utils';
+import { X, Loader2, Check, Trash2, ChevronDown, AlertCircle } from 'lucide-react';
 
 const PHASES = ['Design', 'Permit', 'Construction', 'Fit-out', 'Inspection', 'Handover'];
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
+
+const PROGRESS_MIN = 0;
+const PROGRESS_MAX = 100;
+const NOTES_ROWS = 4;
+
+/**
+ * Spelled out rather than interpolated: Tailwind scans source text, so
+ * `bg-${color}-50` would be purged from the build.
+ */
+const PRIORITY_ACTIVE_CLS: Record<string, string> = {
+  High: 'bg-red-50 text-red-700 ring-red-200',
+  Medium: 'bg-amber-50 text-amber-700 ring-amber-200',
+  Low: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+};
+
+// Width is deliberately not baked in: Tailwind emits `w-full` after `w-20`, so a
+// `w-full` here would win over any narrower width a caller appends.
+const CONTROL_BASE =
+  'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition ' +
+  'placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10';
+const CONTROL_CLS = `w-full ${CONTROL_BASE}`;
+const SELECT_CLS = `${CONTROL_CLS} cursor-pointer appearance-none pr-9`;
+
+/** A titled group of fields, separated from its neighbours by a hairline. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-t border-slate-100 px-5 py-4 first:border-t-0 sm:px-6">
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+/** Label + control pair. `min-w-0` keeps date inputs from blowing out the grid. */
+function Field({ label, htmlFor, children, hint }: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-medium text-slate-600">{label}</label>
+      {children}
+      {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
+    </div>
+  );
+}
+
+/** Wraps a native select so every browser shows the same chevron. */
+function SelectShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+    </div>
+  );
+}
 
 export default function TaskEditModal({
   task, projects, onClose, onSaved,
@@ -16,6 +75,9 @@ export default function TaskEditModal({
   onClose: () => void;
   onSaved?: () => void;
 }) {
+  const uid = useId();
+  const fid = (name: string) => `${uid}-${name}`;
+  const panelRef = useRef<HTMLFormElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -35,6 +97,27 @@ export default function TaskEditModal({
     constraint_note: task.constraint_note || '',
     notes: task.notes || '',
   });
+
+  // Held in a ref so the effect below can keep empty deps: call sites pass an
+  // inline arrow, which would otherwise re-run this on every parent render.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Escape closes, the page behind stops scrolling, and focus moves into the
+  // dialog so keyboard users are not left tabbing through the page underneath.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCloseRef.current();
+    }
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    panelRef.current?.focus();
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,135 +180,264 @@ export default function TaskEditModal({
     onClose();
   }
 
-  const inputCls = 'w-full text-xs md:text-sm bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30';
-  const labelCls = 'text-[10px] text-slate-400 uppercase font-medium';
+  function setProgress(value: number) {
+    const clamped = Math.min(PROGRESS_MAX, Math.max(PROGRESS_MIN, value));
+    setForm({ ...form, progress_pct: clamped });
+  }
+
+  const projectName = projects.find((p) => p.id === form.project_id)?.name || '';
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} />
+
       <form
+        ref={panelRef}
+        tabIndex={-1}
         onSubmit={submit}
-        className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={fid('heading')}
+        className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 focus:outline-none sm:rounded-2xl"
       >
-        <div className="sticky top-0 bg-white border-b border-slate-100 p-4 flex items-center justify-between">
-          <h2 className="font-semibold text-sm">Edit Task</h2>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+        {/* Grab handle: this is a bottom sheet on phones. */}
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-200 sm:hidden" />
+
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: statusColor(form.kanban_status) }}
+                aria-hidden
+              />
+              <h2 id={fid('heading')} className="text-base font-semibold text-slate-900">Edit Task</h2>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-slate-500">
+              {projectName ? `${projectName} · ` : ''}{form.kanban_status}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 -mt-1 shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
             <X size={18} />
           </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {error && (
+            <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 sm:mx-6">
+              <AlertCircle size={15} className="mt-px shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <Section title="Task">
+            <Field label="Title" htmlFor={fid('title')}>
+              <input
+                id={fid('title')}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className={`${CONTROL_CLS} text-[15px] font-medium`}
+                required
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Project" htmlFor={fid('project')}>
+                <SelectShell>
+                  <select
+                    id={fid('project')}
+                    value={form.project_id}
+                    onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                    className={SELECT_CLS}
+                  >
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </SelectShell>
+              </Field>
+              <Field label="Phase" htmlFor={fid('phase')}>
+                <SelectShell>
+                  <select
+                    id={fid('phase')}
+                    value={form.phase}
+                    onChange={(e) => setForm({ ...form, phase: e.target.value })}
+                    className={SELECT_CLS}
+                  >
+                    {PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </SelectShell>
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Owner" htmlFor={fid('owner')}>
+                <input
+                  id={fid('owner')}
+                  value={form.owner}
+                  onChange={(e) => setForm({ ...form, owner: e.target.value })}
+                  className={CONTROL_CLS}
+                  placeholder="Unassigned"
+                />
+              </Field>
+              <Field label="Zone" htmlFor={fid('zone')}>
+                <input
+                  id={fid('zone')}
+                  value={form.zone}
+                  onChange={(e) => setForm({ ...form, zone: e.target.value })}
+                  className={CONTROL_CLS}
+                  placeholder="e.g. Lobby"
+                />
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Status">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Column" htmlFor={fid('status')}>
+                <SelectShell>
+                  <select
+                    id={fid('status')}
+                    value={form.kanban_status}
+                    onChange={(e) => setForm({ ...form, kanban_status: e.target.value })}
+                    className={SELECT_CLS}
+                  >
+                    {COLUMNS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </SelectShell>
+              </Field>
+
+              <div className="min-w-0">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600" id={fid('priority-label')}>
+                  Priority
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby={fid('priority-label')}
+                  className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1"
+                >
+                  {PRIORITIES.map((p) => {
+                    const active = form.priority === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setForm({ ...form, priority: p })}
+                        className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition ${
+                          active
+                            ? `${PRIORITY_ACTIVE_CLS[p]} shadow-sm ring-1`
+                            : 'text-slate-500 hover:bg-white hover:text-slate-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <Field label={`Progress — ${form.progress_pct}%`} htmlFor={fid('progress')}>
+              <div className="flex items-center gap-3">
+                <input
+                  id={fid('progress')}
+                  type="range"
+                  min={PROGRESS_MIN}
+                  max={PROGRESS_MAX}
+                  step={5}
+                  value={form.progress_pct}
+                  onChange={(e) => setProgress(Number(e.target.value))}
+                  className="flex-1 cursor-pointer accent-blue-600"
+                />
+                <input
+                  type="number"
+                  min={PROGRESS_MIN}
+                  max={PROGRESS_MAX}
+                  value={form.progress_pct}
+                  onChange={(e) => setProgress(Number(e.target.value) || 0)}
+                  aria-label="Progress percent"
+                  className={`${CONTROL_BASE} w-20 shrink-0 text-center tabular-nums`}
+                />
+              </div>
+            </Field>
+          </Section>
+
+          <Section title="Schedule">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Planned start" htmlFor={fid('ps')}>
+                <input id={fid('ps')} type="date" value={form.planned_start} onChange={(e) => setForm({ ...form, planned_start: e.target.value })} className={CONTROL_CLS} />
+              </Field>
+              <Field label="Planned end" htmlFor={fid('pe')}>
+                <input id={fid('pe')} type="date" value={form.planned_end} onChange={(e) => setForm({ ...form, planned_end: e.target.value })} className={CONTROL_CLS} />
+              </Field>
+              <Field label="Due date" htmlFor={fid('due')}>
+                <input id={fid('due')} type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className={CONTROL_CLS} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Actual start" htmlFor={fid('as')}>
+                <input id={fid('as')} type="date" value={form.actual_start} onChange={(e) => setForm({ ...form, actual_start: e.target.value })} className={CONTROL_CLS} />
+              </Field>
+              <Field label="Actual end" htmlFor={fid('ae')}>
+                <input id={fid('ae')} type="date" value={form.actual_end} onChange={(e) => setForm({ ...form, actual_end: e.target.value })} className={CONTROL_CLS} />
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Notes">
+            <Field label="Constraint note" htmlFor={fid('constraint')} hint="What is blocking this task, if anything.">
+              <input
+                id={fid('constraint')}
+                value={form.constraint_note}
+                onChange={(e) => setForm({ ...form, constraint_note: e.target.value })}
+                className={CONTROL_CLS}
+                placeholder="e.g. Chờ vật tư"
+              />
+            </Field>
+            <Field label="Notes" htmlFor={fid('notes')}>
+              <textarea
+                id={fid('notes')}
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                className={`${CONTROL_CLS} resize-y leading-relaxed`}
+                rows={NOTES_ROWS}
+              />
+            </Field>
+          </Section>
         </div>
 
-        <div className="p-4 space-y-3">
-          {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">⚠ {error}</div>}
-
-          <div>
-            <label className={labelCls}>Project</label>
-            <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} className={inputCls}>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className={labelCls}>Title *</label>
-            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inputCls} required />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelCls}>Phase</label>
-              <select value={form.phase} onChange={(e) => setForm({ ...form, phase: e.target.value })} className={inputCls}>
-                {PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Zone</label>
-              <input value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })} className={inputCls} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelCls}>Owner</label>
-              <input value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Priority</label>
-              <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className={inputCls}>
-                {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelCls}>Status</label>
-              <select value={form.kanban_status} onChange={(e) => setForm({ ...form, kanban_status: e.target.value })} className={inputCls}>
-                {COLUMNS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Progress %</label>
-              <input type="number" min={0} max={100} value={form.progress_pct} onChange={(e) => setForm({ ...form, progress_pct: Number(e.target.value) || 0 })} className={inputCls} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className={labelCls}>Planned start</label>
-              <input type="date" value={form.planned_start} onChange={(e) => setForm({ ...form, planned_start: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Planned end</label>
-              <input type="date" value={form.planned_end} onChange={(e) => setForm({ ...form, planned_end: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Due date</label>
-              <input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className={inputCls} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelCls}>Actual start</label>
-              <input type="date" value={form.actual_start} onChange={(e) => setForm({ ...form, actual_start: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Actual end</label>
-              <input type="date" value={form.actual_end} onChange={(e) => setForm({ ...form, actual_end: e.target.value })} className={inputCls} />
-            </div>
-          </div>
-
-          <div>
-            <label className={labelCls}>Constraint note</label>
-            <input value={form.constraint_note} onChange={(e) => setForm({ ...form, constraint_note: e.target.value })} className={inputCls} placeholder="e.g. Chờ vật tư" />
-          </div>
-
-          <div>
-            <label className={labelCls}>Notes</label>
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} rows={2} />
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 bg-white border-t border-slate-100 p-3 flex items-center justify-between gap-2">
+        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3 sm:px-6">
           <button
             type="button"
             onClick={deleteTask}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 text-xs text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-red-600 transition hover:border-red-200 hover:bg-red-50 disabled:opacity-50"
           >
-            <Trash2 size={14} /> Delete
+            <Trash2 size={15} /> Delete
           </button>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="text-xs px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-200/60"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-1.5 text-xs bg-[#2563eb] text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563eb] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
             >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
-              Save
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+              Save changes
             </button>
           </div>
-        </div>
+        </footer>
       </form>
     </div>
   );
