@@ -9,6 +9,7 @@ import {
   overdueWork,
   unscheduledByDepartment,
   monthGrid,
+  portfolioReadiness,
   type ReadinessTask,
 } from './readiness';
 
@@ -306,6 +307,74 @@ describe('unscheduledByDepartment', () => {
 
   test('ignores completed rows', () => {
     expect(unscheduledByDepartment([gate({ kanban_status: 'Done' })])).toEqual([]);
+  });
+});
+
+describe('portfolioReadiness', () => {
+  const PROJECTS = [
+    { id: 'p1', name: 'Chateau De Saigon', status: 'In Progress', target_end: '2026-10-01' },
+    { id: 'p2', name: 'Villa Da Lat', status: 'In Progress', target_end: '2026-12-01' },
+  ];
+
+  test('keeps each project gates and work separate rather than pooling them', () => {
+    // Arrange — the same department name in both projects, which the flat
+    // aggregation would have merged into a single row.
+    const tasks = [
+      gate({ project_id: 'p1', phase: 'Engineering', kanban_status: 'Done' }),
+      gate({ project_id: 'p1', phase: 'Engineering' }),
+      work({ project_id: 'p1', phase: 'Engineering', due_date: '2026-08-01' }),
+      gate({ project_id: 'p2', phase: 'Engineering' }),
+      work({ project_id: 'p2', phase: 'Engineering', due_date: '2026-11-01' }),
+    ];
+
+    // Act
+    const rows = portfolioReadiness(PROJECTS, tasks, TODAY);
+
+    // Assert
+    const p1 = rows.find((r) => r.projectId === 'p1')!;
+    const p2 = rows.find((r) => r.projectId === 'p2')!;
+    expect(p1.gatesTotal).toBe(2);
+    expect(p1.gatesMet).toBe(1);
+    expect(p1.workOverdue).toBe(1);
+    expect(p2.gatesTotal).toBe(1);
+    expect(p2.gatesMet).toBe(0);
+    expect(p2.workOverdue).toBe(0);
+  });
+
+  test('counts days to opening from each project own target date', () => {
+    const rows = portfolioReadiness(PROJECTS, [], TODAY);
+    expect(rows.find((r) => r.projectId === 'p1')!.daysToOpening).toBe(28);
+    expect(rows.find((r) => r.projectId === 'p2')!.daysToOpening).toBe(89);
+  });
+
+  test('sorts worst risk first, then by nearest opening', () => {
+    // p2 has an unmobilised department; p1 is merely behind.
+    const tasks = [
+      work({ project_id: 'p1', phase: 'Culinary', due_date: '2026-08-01' }),
+      work({ project_id: 'p1', phase: 'Culinary', due_date: '2026-09-20' }),
+      gate({ project_id: 'p2', phase: 'Legal', owner: null }),
+    ];
+    expect(portfolioReadiness(PROJECTS, tasks, TODAY).map((r) => r.projectId)).toEqual([
+      'p2',
+      'p1',
+    ]);
+  });
+
+  test('ignores tasks belonging to no known project instead of misattributing them', () => {
+    const tasks = [
+      work({ project_id: 'ghost', phase: 'Engineering', due_date: '2026-08-01' }),
+      work({ project_id: 'p1', phase: 'Engineering', due_date: '2026-08-01' }),
+    ];
+    const rows = portfolioReadiness(PROJECTS, tasks, TODAY);
+    expect(rows.find((r) => r.projectId === 'p1')!.workOpen).toBe(1);
+    expect(rows.reduce((s, r) => s + r.workOpen, 0)).toBe(1);
+  });
+
+  test('returns a row per project even when a project has no tasks', () => {
+    const rows = portfolioReadiness(PROJECTS, [], TODAY);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.gatesTotal === 0 && r.workOpen === 0)).toBe(true);
+    expect(rows.every((r) => r.risk === 'clear')).toBe(true);
   });
 });
 

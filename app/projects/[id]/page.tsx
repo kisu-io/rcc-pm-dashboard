@@ -4,8 +4,9 @@ import { getProject, getTasks, getMilestones, getDocuments } from '@/lib/data-se
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
 import { effectiveProgress } from '@/lib/phase';
 import { projectStatusBadge } from '@/lib/ui';
-import { departmentReadiness, todayISO } from '@/lib/readiness';
+import { departmentReadiness, programmeReadiness, todayISO } from '@/lib/readiness';
 import DepartmentLedger from '@/components/readiness/DepartmentLedger';
+import ReadinessSummary from '@/components/readiness/ReadinessSummary';
 import EditProjectButton from '@/components/EditProjectButton';
 import EditGuard from '@/components/EditGuard';
 import MilestonesList from '@/components/MilestonesList';
@@ -42,7 +43,12 @@ export default async function ProjectDetail({ params }: { params: { id: string }
   const done = tasks.filter((t) => t.kanban_status === 'Done').length;
 
   const effPct = effectiveProgress(project, tasks);
-  const departments = departmentReadiness(tasks, todayISO());
+  const today = todayISO();
+  const departments = departmentReadiness(tasks, today);
+  /* Scoped to this project's own tasks and its own target date, so the figures
+     mean the same thing here as on the portfolio screen — just for one
+     programme. */
+  const programme = programmeReadiness(tasks, today, project.target_end ?? null);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -166,6 +172,8 @@ export default async function ProjectDetail({ params }: { params: { id: string }
         this shows — the same ledger as the readiness screen, scoped to this
         project.
       */}
+      <ReadinessSummary programme={programme} projectName={project.name} />
+
       <DepartmentLedger rows={departments} />
 
       {/* Tasks + Milestones */}
