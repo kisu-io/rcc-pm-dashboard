@@ -6,7 +6,7 @@ import {
 } from '@dnd-kit/core';
 import { Task, Project, supabase } from '@/lib/supabase';
 import TaskEditModal from './TaskEditModal';
-import { phaseColor, priorityColor, formatDate } from '@/lib/schedule-utils';
+import { phaseColor, priorityColor, formatDate, statusColor } from '@/lib/schedule-utils';
 import { AlertTriangle, Clock, User, MapPin } from 'lucide-react';
 import { checkWrite } from '@/lib/writes';
 import { useCanEdit } from '@/lib/useRole';
@@ -16,13 +16,6 @@ const ALL_COLUMNS = ['To Do', 'In Progress', 'Review', 'Done'];
 
 /** Columns that always appear, because you must be able to drag into them. */
 const REQUIRED_COLUMNS = new Set(['To Do', 'In Progress', 'Done']);
-
-const COL_COLOR: Record<string, string> = {
-  'To Do': '#94a3b8',
-  'In Progress': '#2563eb',
-  Review: '#a855f7',
-  Done: '#22c55e',
-};
 
 /**
  * Cards rendered per column before a "show more" button.
@@ -67,7 +60,7 @@ function Card({ task, projName, projects, onEdit, onSaved }: {
     : { touchAction: 'none' as const, borderLeft: `4px solid ${phaseColor(task.phase)}` };
 
   const phColor = phaseColor(task.phase);
-  const colColor = COL_COLOR[task.kanban_status] || '#94a3b8';
+  const colColor = statusColor(task.kanban_status);
   const pColor = priorityColor(task.priority);
 
   return (
@@ -163,7 +156,7 @@ function Column({ status, tasks, projMap, projects, onEdit, onSaved }: {
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const [shown, setShown] = useState(CARDS_PER_PAGE);
-  const colColor = COL_COLOR[status] || '#94a3b8';
+  const colColor = statusColor(status);
 
   // Reset the window when the filtered set changes, so a narrow filter does not
   // leave a stale "show more" count behind.

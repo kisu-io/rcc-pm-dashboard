@@ -195,3 +195,19 @@ export function uniqueZones(tasks: ScheduleTask[]): string[] {
   tasks.forEach((t) => { if (t.zone) seen.add(t.zone); });
   return Array.from(seen);
 }
+
+/**
+ * Kanban column colors. Lives here rather than in KanbanBoard so the board and
+ * the task editor tint the same status identically.
+ */
+export const KANBAN_STATUS_COLOR: Record<string, string> = {
+  'To Do': '#94a3b8',       // slate-400
+  'In Progress': '#2563eb', // blue-600
+  Review: '#a855f7',        // purple-500
+  Done: '#22c55e',          // green-500
+};
+
+export function statusColor(status: string | null | undefined): string {
+  if (!status) return '#94a3b8';
+  return KANBAN_STATUS_COLOR[status] || '#94a3b8';
+}
