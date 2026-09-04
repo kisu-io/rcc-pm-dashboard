@@ -107,3 +107,52 @@ export const TYPE = {
   lead: 'text-base font-medium',
   figure: 'text-2xl md:text-3xl font-bold tabular-nums',
 } as const;
+
+/**
+ * How each module state reads.
+ *
+ * Deliberately a separate scale from READINESS_STATUS: a *department* is
+ * measured against opening gates, a *module* against its own record set. Both
+ * borrow the same semantic colours — grey nothing, red late, amber starting,
+ * blue moving, green done — so the two screens stay legible together.
+ */
+export const MODULE_STATE: Record<
+  import('./modules').ModuleState,
+  { label: string; labelVN: string; chip: string; bar: string; meaning: string }
+> = {
+  'no-data': {
+    label: 'No records',
+    labelVN: 'Chưa có dữ liệu',
+    chip: 'bg-slate-100 text-slate-500',
+    bar: 'bg-slate-300',
+    meaning: 'This team has not loaded its workbook yet.',
+  },
+  'not-started': {
+    label: 'Not started',
+    labelVN: 'Chưa bắt đầu',
+    chip: 'bg-slate-200 text-slate-700',
+    bar: 'bg-slate-400',
+    meaning: 'Records exist, but nothing is done and nothing is in progress.',
+  },
+  behind: {
+    label: 'Behind',
+    labelVN: 'Chậm tiến độ',
+    chip: 'bg-red-100 text-red-700',
+    bar: 'bg-red-500',
+    meaning: 'At least one open item is past its date.',
+  },
+  'on-track': {
+    label: 'On track',
+    labelVN: 'Đúng tiến độ',
+    chip: 'bg-blue-100 text-blue-700',
+    bar: 'bg-blue-500',
+    meaning: 'Work is moving and none of it is late.',
+  },
+  complete: {
+    label: 'Complete',
+    labelVN: 'Hoàn thành',
+    chip: 'bg-green-100 text-green-700',
+    bar: 'bg-green-500',
+    meaning: 'Every record in this module is done.',
+  },
+};

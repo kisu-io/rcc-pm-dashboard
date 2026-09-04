@@ -13,3 +13,6 @@ supabase/.temp
 /playwright/.cache/
 /tsconfig.tsbuildinfo
 .env*
+
+# test coverage output
+coverage/

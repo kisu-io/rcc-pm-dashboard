@@ -1,5 +1,5 @@
 import { getProjects, getTasks } from '@/lib/data-server';
-import { effectiveProgress } from '@/lib/phase';
+import { effectiveProgress } from '@/lib/modules';
 import ProjectCard from '@/components/ProjectCard';
 import ProjectsFilters from '@/components/ProjectsFilters';
 import AddProjectButton from '@/components/AddProjectButton';

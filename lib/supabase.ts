@@ -25,6 +25,9 @@ export type Project = {
   pct_procurement: number | null;
   pct_construction: number | null;
   pct_sales: number | null;
+  /** Sixth module override, added by supabase-phase10.sql. Optional so the app
+   *  runs before the migration. 0/null = derive from tasks. */
+  pct_operation?: number | null;
   created_at?: string;
 };
 
@@ -55,6 +58,10 @@ export type Task = {
   /** Month bucket the row was planned into, first-of-month. `due_date` carries
    *  no day precision: 319 of 366 dated rows land on the 1st or the 15th. */
   due_month?: string | null;
+  /** Which of the six delivery modules owns this row — the team, not the
+   *  department. Added by supabase-phase10.sql; optional so the app runs
+   *  before the migration, where lib/modules.ts falls back to 'operation'. */
+  module?: string | null;
 };
 
 export type Milestone = {
