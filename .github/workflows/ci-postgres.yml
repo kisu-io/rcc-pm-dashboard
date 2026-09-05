@@ -66,7 +66,7 @@ jobs:
       OE_TEST_DB: pg
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Create empty frontend dist (hatchling force-include)
@@ -997,7 +997,7 @@ jobs:
       OE_TEST_DB: pg
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Create empty frontend dist (hatchling force-include)
@@ -1656,7 +1656,7 @@ jobs:
     # carries information rather than destroying it.
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Create empty frontend dist (hatchling force-include)
