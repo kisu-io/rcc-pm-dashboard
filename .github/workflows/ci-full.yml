@@ -1,0 +1,221 @@
+name: CI Full Suite
+
+# Nightly full backend test run (unit + integration). The push gate in
+# ci.yml runs the unit tree only because the integration tree against a
+# service container does not fit the 60 minute job limit. This workflow
+# gives the integration tree a real budget and can also be started by hand.
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  backend-full:
+    name: Backend Full Suite (shard ${{ matrix.shard }}/32)
+    runs-on: ubuntu-latest
+    # Run serially this job never finished, so pytest-split fans the collected
+    # tree across matrix shards, each on its own runner with its own throwaway
+    # PostgreSQL service. Same mechanism the push gate uses for the unit tree.
+    #
+    # Eight shards was still not enough, for a reason worth writing down: with
+    # no stored durations pytest-split partitions by test COUNT, and this tree's
+    # per-test cost is not uniform to within an order of magnitude. Measured on
+    # the 2026-08-14 nightly, shard 3 ran 3288 tests in 143 seconds (0.04s each,
+    # all of them tests/unit) while shards 1 and 2 held tests/integration plus
+    # tests/modules and were still running when the 120 minute ceiling cancelled
+    # them - a cancel is an ABSENT result, not a failure, so the nightly had
+    # never once produced a full signal. The database-backed 5875 tests in those
+    # two trees are roughly 22% of the collected count and very nearly 100% of
+    # the wall clock; shard 1 exhausted the service container's 100 connections
+    # outright ("sorry, too many clients already" from 05:16 on).
+    #
+    # 32 spreads that heavy 22% across about seven shards instead of two, which
+    # puts each of them well inside the ceiling with room for the tree to grow.
+    # The cheap unit shards finish in two or three minutes and cost little. Note
+    # the split stays COUNT-based and pathless, so the union of the shards is
+    # still exactly the collected tree - resist the temptation to hand-assign
+    # directories to shards, because tests/benchmarks, tests/eval, tests/perf,
+    # tests/pg and the loose tests/test_*.py files would then silently drop out.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+          ]
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: oe
+          POSTGRES_PASSWORD: oe
+          POSTGRES_DB: openconstructionerp_test
+          # A BACKSTOP, NOT THE FIX. The fix is that the fixtures which used to
+          # rebuild the schema per test now build it once per module and delete
+          # rows between tests (backend/tests/_pg.py, clear_module_tables); no
+          # test in the tree does `Base.metadata.drop_all` any more. This
+          # setting stays for the NEXT person who writes a create_all over a
+          # wide closure without knowing why we care, so that lands as a slow
+          # test rather than as a shard of unexplained `out of shared memory`.
+          # If it is ever the thing keeping the nightly green, something has
+          # regressed to the per-test rebuild and that is the thing to fix.
+          #
+          # Raise the per-transaction lock allowance above the stock 64. Several
+          # test modules rebuild the whole schema per test - one `begin()` doing
+          # `Base.metadata.drop_all` then `create_all`, every table plus its
+          # indexes and sequences taking an ACCESS EXCLUSIVE lock held to commit
+          # - and the stock allowance cannot hold that many. Measured rather than
+          # estimated: with all 151 model modules imported, the state a shard
+          # reaches part way through, `Base.metadata` holds 624 tables and one
+          # such transaction was observed holding 19529 lock entries against a
+          # populated schema (8539 when there was nothing to drop). The stock
+          # setting allots max_locks_per_transaction 64 x max_connections 100 =
+          # 6400 nominal slots, below both. The lock table can spill into spare
+          # shared memory, which is why a quiet cluster survives the overdraft
+          # and a shard running the heavy tree does not; 256 gives 25600 slots
+          # and stops the arithmetic depending on the spare.
+          # PostgreSQL answers `out of shared memory` with `HINT: You might need
+          # to increase max_locks_per_transaction`, which is what the nightly has
+          # been reporting: on run 33245180634 it produced 29 of the 34 failures
+          # on shard 4, and every one of that shard's ERRORs was this and nothing
+          # else. It is a real ceiling, not a flaky one - the 2026-08-25 nightly
+          # hit the identical 29 on the same shard.
+          #
+          # The population matters more than the count, because it is why these
+          # cannot simply be listed as known failures: the victims are whichever
+          # schema-rebuilding tests land together in one shard, and pytest-split
+          # partitions the COLLECTED tree by count, so the set moves whenever the
+          # tree grows. On 2026-08-25 the same defect also took five
+          # `test_crm_lead_dedup` tests down in shard 7; four days and ~2000 new
+          # tests later those five had moved to another shard and passed. A list
+          # of test names would have gone stale on its own.
+          #
+          # It has to be set here rather than at runtime: max_locks_per_transaction
+          # is postmaster-level, so `ALTER SYSTEM` plus a reload cannot move it,
+          # and a GitHub Actions service block takes no `command:` to pass `-c`
+          # to the server. `initdb --set` writes it into postgresql.conf while the
+          # cluster is being created, which the entrypoint does before first
+          # start. Verified against PostgreSQL 16.11's own initdb:
+          # `-c, --set NAME=VALUE  override default setting for server parameter`.
+          POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oe -d openconstructionerp_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Create empty frontend dist (hatchling force-include)
+        run: |
+          mkdir -p ../frontend/dist
+          touch ../frontend/dist/.gitkeep
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run full test suite
+        env:
+          DATABASE_URL: postgresql+asyncpg://oe:oe@localhost:5432/openconstructionerp_test
+          DATABASE_SYNC_URL: postgresql+psycopg2://oe:oe@localhost:5432/openconstructionerp_test
+          # Without this pytest block-buffers stdout when it is not a TTY, and a
+          # shard killed at the job ceiling takes the whole undelivered buffer
+          # with it. That is exactly what happened on 2026-08-14: the two
+          # cancelled shards logged not one test name in two hours, so the only
+          # evidence of where they were came from the PostgreSQL container's own
+          # log. Unbuffered plus -v means whatever a killed shard did reach is on
+          # record, and the last line names the test it was inside.
+          PYTHONUNBUFFERED: "1"
+        # A per-test timeout so one hung test can no longer eat the whole
+        # budget with the run cancelled and no signal of where it stalled - it
+        # becomes a reported failure and the suite carries on. --durations and
+        # -ra then make the slow spots and failures readable without scrolling
+        # hours of Postgres logs. 900s is generous: no real unit or
+        # integration test should approach 15 minutes. pytest-split partitions
+        # the collected tree deterministically, so every test runs in exactly
+        # one shard and the union of the 32 shards is the whole tree.
+        run: >-
+          pytest -v -ra --durations=50 --timeout=900 --timeout-method=thread
+          --splits 32 --group ${{ matrix.shard }}
+
+  backend-full-gate:
+    name: Backend Full Suite
+    # One stable status check that is green only when every shard passed, so
+    # the nightly still reads as a single pass/fail at a glance.
+    needs: [backend-full]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all shards to pass
+        run: |
+          if [ "${{ needs.backend-full.result }}" != "success" ]; then
+            echo "Full-suite shards did not all pass: ${{ needs.backend-full.result }}"
+            exit 1
+          fi
+          echo "All full-suite shards passed."
+
+  backend-full-cross-os:
+    name: Backend Full Suite (${{ matrix.os }}, embedded PG)
+    # Nightly cross-OS deep run: the full backend suite on the embedded
+    # PostgreSQL the desktop and self-hosted builds ship (pixeltable-pgserver,
+    # no Docker), on the two OSes the Linux service-container job above cannot
+    # cover. Nightly, so the heavier embedded-PG path has room and a red run is a
+    # signal to fix rather than a merge blocker. This is where OS-specific
+    # integration gaps (path handling, file locking, case sensitivity) surface.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Create empty frontend dist (hatchling force-include)
+        shell: bash
+        run: |
+          mkdir -p ../frontend/dist
+          touch ../frontend/dist/.gitkeep
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run full test suite (embedded PostgreSQL)
+        # No DATABASE_URL -> conftest boots the embedded pixeltable-pgserver
+        # cluster. thread timeout method because signal/SIGALRM is Unix-only and
+        # would break the Windows runner.
+        env:
+          # Same reason as the sharded job above: keep a killed or timed-out run
+          # from swallowing the output that says where it was.
+          PYTHONUNBUFFERED: "1"
+        run: pytest -v -ra --durations=50 --timeout=900 --timeout-method=thread

@@ -1,68 +1,148 @@
-# RCC PM Dashboard — Security Review (Phase 5c)
+# Security Policy
 
-**Date:** 2026-07-06
-**Reviewer:** Hermes Agent (automated)
-**Scope:** RLS policies, triggers, security-definer functions, repo secrets.
+## Reporting a Vulnerability
 
-## Summary
+If you discover a security vulnerability in OpenConstructionERP,
+please report it responsibly.
 
-**No critical issues found.** Repo is clean of secrets. RLS is correctly enabled on every table. Two minor hardening recommendations below.
+**DO NOT** open a public GitHub issue for security vulnerabilities.
+Public disclosure before a fix is available puts users at risk.
 
-## RLS posture
+### How to Report
 
-| Table | SELECT | INSERT/UPDATE/DELETE | Notes |
-|---|---|---|---|
-| `projects` | `auth.uid() is not null` | `is_pm()` (pm/admin) | ✅ |
-| `tasks` | `auth.uid() is not null` | `is_pm()` | ✅ |
-| `milestones` | `auth.uid() is not null` | `is_pm()` | ✅ |
-| `documents` | `auth.uid() is not null` | `is_pm()` | ✅ |
-| `materials` | `auth.uid() is not null` | `is_pm()` | ✅ Phase 4 `read all`/`write all` dropped & replaced in `supabase-auth.sql` |
-| `cost_entries` | `auth.uid() is not null` | `is_pm()` | ✅ new in Phase 5 |
-| `activity_log` | `auth.uid() is not null` | **no policy** (trigger-only write) | ✅ append-only |
-| `user_roles` | `auth.uid() is not null` | insert: self OR admin · update: admin only | ⚠️ see below |
-| Storage buckets | `auth.uid() is not null` | `is_pm()` | ✅ |
+1. **GitHub Security Advisories** (preferred):
+   [Create a new advisory](https://github.com/datadrivenconstruction/OpenConstructionERP/security/advisories/new)
 
-## Security-definer functions
+2. **Email:** `info@datadrivenconstruction.io`
 
-| Function | Privilege | Gate | Safe? |
-|---|---|---|---|
-| `current_user_role()` | reads `user_roles` for `auth.uid()` | none (anyone can call, only reads own role) | ✅ |
-| `is_pm()` | wraps `current_user_role()` | none needed | ✅ |
-| `list_users_with_roles()` | reads `auth.users` + `user_roles` | **raises 42501 if caller is not admin** | ✅ |
-| `recompute_project_spent()` | updates `projects.spent` | only callable via trigger on `cost_entries` writes, which are gated to `is_pm()` | ✅ |
-| `log_write()` | inserts into `activity_log` | only callable via triggers; no direct INSERT policy on `activity_log` | ✅ |
+### What to Include
 
-## Repo secrets scan
+- Description of the vulnerability
+- Affected version (commit hash or release tag) and component
+  (backend module, frontend, desktop client, Docker image)
+- Steps to reproduce
+- Potential impact (CIA classification and realistic scenarios)
+- Suggested fix (if any)
+- Your preferred credit attribution (or request for anonymity)
 
-- **`.env.local` / `.env`** — gitignored (`.gitignore` confirmed).
-- **`.env.example`** — checked in, contains only placeholder (`your-anon-key-here`). ✅
-- **Git history scan** — no `service_role` keys, no JWTs, no passwords in any commit. Only a documentation comment mentioning `service_role` as bootstrap guidance. ✅
-- **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** — intentionally public (client-side Supabase), safe to expose. RLS is the gate, not the key.
+### Response Timeline
 
-## Findings & recommendations
+We follow coordinated disclosure:
 
-### ✅ No critical issues
+| Action                | Target time                                              |
+|-----------------------|----------------------------------------------------------|
+| Acknowledgement       | 48 hours                                                 |
+| Initial assessment    | 5 business days                                          |
+| Fix development       | 14 business days (critical: 72 hours)                    |
+| Public disclosure     | After a fix is released; at the latest 120 days from report |
 
-All write paths are gated by `is_pm()` or admin-only checks. Read paths require authentication. Anon access is blocked everywhere (explicit `auth.uid() is not null`).
+For actively exploited vulnerabilities, we shorten all stages and
+publish a mitigation advisory as soon as one is available.
 
-### ⚠️ Minor: `user_roles` update policy is admin-only but has no `WITH CHECK`
+## Supported Versions
 
-```sql
-create policy "update own role" on public.user_roles
-  for update
-  using (auth.uid() in (select user_id from public.user_roles where role = 'admin'));
-```
+| Version track          | Security updates                                    |
+|------------------------|-----------------------------------------------------|
+| `0.1.x` (current)      | Yes                                                 |
+| Earlier 0.x releases   | No - upgrade path published in release notes        |
 
-There's no `with check` clause. A admin could theoretically set `role` to an arbitrary string — but the `CHECK (role in ('pm', 'viewer', 'admin'))` column constraint prevents this. So the table-level CHECK compensates. **No action required**, but adding `with check (role in ('pm','viewer','admin'))` would be belt-and-suspenders.
+Once a `1.0.0` line is released, this matrix will be updated to
+keep the latest stable plus the previous minor for six months.
 
-### ⚠️ Minor: `user_roles` has no DELETE policy
+## Scope
 
-Admins cannot delete a `user_roles` row via the client SDK (only insert/upsert). This is intentional — we don't want users to be un-personned from the UI. If cleanup is needed, do it in Supabase Studio.
+**In scope:**
 
-### ℹ️ Note: `activity_log` RLS allows any authenticated user to read
+- Backend API (FastAPI services under `backend/app/`)
+- Frontend web application (`frontend/`)
+- Desktop client (`desktop/`)
+- Official Docker images published by DataDrivenConstruction and
+  the DDC-operated instance at `https://openconstructionerp.com`
+- CLI tools distributed with the project
+- Build and release automation that produces signed artefacts
+  (`.github/workflows/release*.yml`, `signatures/`)
 
-This is by design for now (roadmap Phase 7 mentions an in-app notification center backed by `activity_log`). If sensitive fields end up in `before`/`after` JSONB (e.g. vendor pricing), consider tightening to admin-only or redacting columns.
+**Out of scope:**
 
-## Remediation
+- Vulnerabilities in third-party dependencies - report directly
+  to the upstream vendor; we will update once a patched version
+  is available.
+- Social engineering of Licensor, contributors, or customers.
+- Issues that require an already-compromised user system or the
+  user deliberately bypassing security controls.
+- Self-XSS, denial-of-service via resource exhaustion on
+  community-edition deployments.
+- Issues restricted to configurations that contradict the
+  self-hosting checklist below (e.g., default `JWT_SECRET`, HTTP
+  instead of HTTPS).
 
-No changes required for Phase 5 sign-off. Recommendations above are tracked for future hardening.
+## External Code and Pull Requests
+
+For security reasons we do not merge external pull requests into the
+codebase. When the community reports a bug, sends a patch, or proposes a
+change, we re-implement the fix ourselves in our own sandbox and review it
+before it ships. This keeps one audited source of truth for a platform that
+companies run in production, and it avoids taking in code we have not written
+and fully reviewed. We credit the original reporter in
+[CONTRIBUTORS.md](CONTRIBUTORS.md) and in the project acknowledgments, and the
+implementation is our own. The policy is enforced in continuous integration: a
+guard rejects any pull request that contains commits not authored by
+DataDrivenConstruction.
+
+## Self-Hosting Security Checklist
+
+If you deploy OpenConstructionERP on your own infrastructure:
+
+- [ ] Change `JWT_SECRET` from the default value
+- [ ] Use HTTPS (TLS 1.2+) in production - never expose HTTP
+      publicly
+- [ ] Set `APP_ENV=production` to disable debug endpoints
+      (`/api/docs`, `/api/redoc`)
+- [ ] Use PostgreSQL with a strong password (not SQLite) for
+      production
+- [ ] Restrict `ALLOWED_ORIGINS` to your actual domain
+- [ ] Keep Docker images updated (`docker compose pull`)
+- [ ] Back up your database regularly and test restores
+- [ ] Review `.env` file permissions - readable only by the app
+      user
+- [ ] If using AI features, protect your provider API keys
+      (OpenAI / Anthropic / Google / Mistral / Groq / DeepSeek) -
+      never commit them to git
+
+## Security Features
+
+- JWT authentication with configurable expiration
+- Password hashing with bcrypt
+- CORS middleware with configurable origins
+- SQL-injection prevention via SQLAlchemy ORM
+- Input validation via Pydantic v2
+- Rate limiting (configurable)
+- Role-based access control (RBAC)
+- Reproducible builds and signed release artefacts
+  (see `signatures/`)
+
+## Regulatory Reporting
+
+Where required by EU Regulation 2024/2847 (Cyber Resilience Act,
+vulnerability-reporting obligations effective 11 September 2026),
+we report actively exploited vulnerabilities through the ENISA
+Single Reporting Platform and cooperate with the German Federal
+Office for Information Security (BSI) / CERT-Bund.
+
+The DDC-operated instance additionally complies with GDPR
+Art. 33 personal-data-breach notification (72 hours to the
+competent supervisory authority).
+
+## No Bug Bounty
+
+DataDrivenConstruction currently does not operate a paid
+bug-bounty programme. We gratefully acknowledge responsible
+researchers in the associated GitHub Security Advisories unless
+anonymity is requested.
+
+## Contact
+
+All security communication: `info@datadrivenconstruction.io`.
+Where GitHub Security Advisories are available, please use that
+channel for reports that include sensitive proof-of-concept
+material.

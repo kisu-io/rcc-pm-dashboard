@@ -291,8 +291,8 @@ Proves the pinned tree builds on Apple Silicon and the overlay boots, before tou
 
 - [ ] **Step 1: Check Docker memory**
 
-Run: `docker info --format '{{.MemTotal}}' | awk '{printf "%.1f GB\n", $1/1024/1024/1024}'`
-Expected: ≥ 12.0 GB. If lower, raise it in Docker Desktop → Settings → Resources → Memory before continuing.
+Run: `docker info --format '{{.MemTotal}}' | awk '{printf "%.1f GiB\n", $1/1024/1024/1024}'`
+Expected: ≥ 11.2 GiB. The formula divides by 1024³, so it prints GiB, while Docker Desktop's "12 GB" memory setting is 12 GB decimal — the same allocation, written as 11.18 GiB. If lower, raise it in Docker Desktop → Settings → Resources → Memory before continuing.
 
 - [ ] **Step 2: Write a throwaway `.env` and build**
 
@@ -363,7 +363,18 @@ git rm .github/workflows/authors-guard.yml .github/workflows/cla.yml \
 ```
 
 Run: `ls .github/workflows`
-Expected: `ci-full.yml ci-postgres.yml ci.yml codeql.yml`
+Expected: `ci-full.yml ci-postgres.yml ci.yml codeql.yml secret-scan.yml`
+
+Two corrections to the list above, found during the final review:
+
+- `installer-scripts.yml` does **not** exist at `v16.7.0` — it was taken from
+  upstream's `main`. The `git rm` therefore removes 16 files, not 17; drop that
+  path from the command.
+- `secret-scan.yml` must be **kept**. It needs no upstream secrets (it fetches a
+  SHA-256-pinned gitleaks binary) and is the repository's only automated
+  credential guard, which this fork needs more than upstream does. It was
+  deleted and then restored; the reasoning is recorded in `RCC.md` → "CI
+  workflows".
 
 - [ ] **Step 2: Commit, push, watch the remaining workflows**
 
@@ -831,22 +842,24 @@ Manual, done by the user on the mini following `deploy/rcc/README.md`, with the 
 Run on the mini: `sysctl -n machdep.cpu.brand_string; sysctl -n hw.memsize | awk '{print $1/1073741824 " GB"}'; df -h / | tail -1; sw_vers -productVersion`
 Expected: Apple M-series; ≥ 16 GB; ≥ 60 GB free; macOS 14 or newer. Confirm the domain is on Cloudflare DNS (Cloudflare dashboard → Websites lists it).
 
-- [ ] **Step 2: Follow README "First-time setup" steps 1–5**
+- [ ] **Step 2: Follow README "First-time setup" steps 1–6, ending with the bootstrap admin**
 
 Run: `deploy/rcc/smoke.sh http://localhost:8080`
 Expected: `health: …`, `demo login: refused (404)`, `OK: http://localhost:8080`.
 
-- [ ] **Step 3: Follow README steps 6–7 (tunnel)**
+Then, still on the mini and still with no tunnel: open `http://localhost:8080/?lang=vi` → Register, as Mr Phán. The first account to register becomes the admin, so this has to happen while the only route to the instance is loopback. Do not start the tunnel until it is done.
+
+- [ ] **Step 3: Follow README steps 7–8 (tunnel)**
 
 Run: `deploy/rcc/smoke.sh "https://$RCC_DOMAIN"` from a device *not* on the home network (phone on mobile data is enough for the browser check; the script from a laptop tethered to it).
 Expected: `OK: https://…`; the login page loads over HTTPS with a valid certificate.
 
-- [ ] **Step 4: Register the bootstrap admin (Mr Phán) and verify the role**
+- [ ] **Step 4: Verify the bootstrap admin through the public URL**
 
-In the browser: `https://$RCC_DOMAIN/?lang=vi` → Register. Then, with the access token from the login response:
+Log in at `https://$RCC_DOMAIN/?lang=vi` as the account registered in Step 2. Then, with the access token from the login response:
 
 Run: `curl -s -H "Authorization: Bearer $TOKEN" "https://$RCC_DOMAIN/api/v1/users/me/" | python3 -c 'import json,sys; print(json.load(sys.stdin)["role"])'`
-Expected: `admin`.
+Expected: `admin` — confirming the public route reaches the same instance and that the bootstrap was already consumed before the tunnel opened.
 
 - [ ] **Step 5: Verify a second registration is held for approval**
 
@@ -869,7 +882,22 @@ Expected: total container memory well under the mini's RAM (typically 1.5–2.5 
 **Files:**
 - None.
 
-- [ ] **Step 1: Open a draft PR `platform/oce` → `main` (do not merge — that is Plan 4)**
+- [ ] **Step 1: Join the Next.js history into `platform/oce` first**
+
+`platform/oce` starts from upstream `v16.7.0` and shares no ancestor with `main`. GitHub refuses to open a pull request between unrelated histories, so `main` has to become an ancestor without changing the fork's tree:
+
+```bash
+git checkout platform/oce
+git fetch origin
+git merge -s ours --no-ff origin/main \
+  -m "chore: join the Next.js history so the platform branch can be compared and merged"
+git diff HEAD~1 HEAD    # must print nothing: the tree is byte-identical to the fork
+git push -u origin platform/oce
+```
+
+Executed as `845524d48`. **Repeat this merge once PR #10 lands on `main`**, otherwise Plan 4's cutover merge takes its base from the pre-#10 commit and arrives as a modify/delete conflict on every file that PR touched — the exact situation the `-s ours` join exists to prevent. Sequence it as one step: merge PR #10 → `git tag legacy-nextjs-final` → re-run the merge above → push.
+
+- [ ] **Step 2: Open a draft PR `platform/oce` → `main` (do not merge — that is Plan 4)**
 
 ```bash
 gh pr create --draft --base main --head platform/oce \
@@ -880,7 +908,7 @@ gh pr create --draft --base main --head platform/oce \
 - Adds the RCC compose overlay with a Cloudflare Tunnel profile (`deploy/rcc/`), launchd backups with restore proof, smoke test, and the fork + Mac mini runbooks
 - Design: `docs/superpowers/specs/2026-09-04-oce-platform-swap-design.md`
 
-**Do not merge** until Plans 2–4 are complete and Mr Phán has signed off on the Mac mini deployment. Merging uses `--allow-unrelated-histories`.
+**Do not merge** until Plans 2–4 are complete and Mr Phán has signed off on the Mac mini deployment. The histories are already joined by the `-s ours` merge in Step 1, so the cutover is an ordinary `--no-ff` merge — no `--allow-unrelated-histories`.
 
 ## Measured on the mini (for Plan 5 VPS sizing)
 - idle memory: <fill from Task 8 Step 7>

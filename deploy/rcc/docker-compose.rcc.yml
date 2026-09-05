@@ -1,0 +1,50 @@
+# deploy/rcc/docker-compose.rcc.yml
+#
+# RCC overlay for upstream's docker-compose.prod.yml, for the Mac mini.
+# Run from the repo root:
+#   docker compose -f docker-compose.prod.yml -f deploy/rcc/docker-compose.rcc.yml --profile public up -d
+#
+# What it changes and why:
+#   * Images are still built here (upstream's build: blocks are inherited).
+#     Upstream publishes amd64 only and says Apple Silicon should build from
+#     source; the mini has the RAM for it.
+#   * SEED_DEMO=false: no demo accounts or showcase projects on RCC's data.
+#   * Registration is admin-approve: the first account to register becomes
+#     admin (Mr Phán); everyone after waits for his approval.
+#   * The frontend is bound to 127.0.0.1:8080 for local checks only. Nothing
+#     else is published; the public route is the Cloudflare Tunnel, which is
+#     an outbound connection from the cloudflared container to Cloudflare.
+#   * cloudflared sits behind the "public" profile so the stack can be built
+#     and checked on any Mac without a tunnel token.
+#
+# `!override` needs Docker Compose v2.24.4+.
+services:
+  backend:
+    environment:
+      SEED_DEMO: "false"
+      OE_REGISTRATION_MODE: ${OE_REGISTRATION_MODE:-admin-approve}
+      OE_DEFAULT_REGISTRATION_ROLE: ${OE_DEFAULT_REGISTRATION_ROLE:-viewer}
+      ALLOWED_ORIGINS: https://${RCC_DOMAIN:?Set RCC_DOMAIN in .env},http://localhost:8080
+      OE_FRONTEND_URL: https://${RCC_DOMAIN}
+
+  frontend:
+    ports: !override
+      - "127.0.0.1:8080:80"
+
+  cloudflared:
+    # Pinned; bump deliberately with the runbook's "Deploying a new version".
+    # This container terminates the public path, so `latest` would let an
+    # unreviewed build swap itself in on any `up -d` — and Rollback, which
+    # only moves the git checkout, would not roll it back.
+    image: cloudflare/cloudflared:2026.8.3
+    restart: unless-stopped
+    profiles: ["public"]
+    command: tunnel --no-autoupdate run
+    environment:
+      # Created in Cloudflare Zero Trust → Networks → Tunnels. Empty by
+      # default so `config` and LAN-only runs work; cloudflared itself
+      # refuses to start without it when the profile is on.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      frontend:
+        condition: service_healthy

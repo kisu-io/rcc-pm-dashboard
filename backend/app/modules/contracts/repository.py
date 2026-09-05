@@ -1,0 +1,687 @@
+# DDC-CWICR-OE: DataDrivenConstruction · OpenConstructionERP
+# Copyright (c) 2026 Artem Boiko / DataDrivenConstruction
+"""Contracts data access layer."""
+
+from __future__ import annotations
+
+import uuid
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.orm.util import identity_key
+from sqlalchemy.sql.elements import ClauseElement
+
+from app.modules.contracts.models import (
+    Contract,
+    ContractDocument,
+    ContractLine,
+    ContractMilestone,
+    ContractParty,
+    ContractSecurity,
+    ContractTemplate,
+    ContractTemplateClause,
+    ContractTypeConfiguration,
+    EOTClaim,
+    FeeStructure,
+    FinalAccount,
+    GainshareConfiguration,
+    LDClause,
+    ProgressClaim,
+    ProgressClaimLine,
+    RetentionSchedule,
+)
+
+
+class _CRUDBase:
+    """Common CRUD operations shared by all contracts repositories."""
+
+    model: type
+    session: AsyncSession
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, item_id: uuid.UUID) -> Any:
+        return await self.session.get(self.model, item_id)
+
+    async def create(self, item: Any) -> Any:
+        self.session.add(item)
+        await self.session.flush()
+        return item
+
+    async def update_fields(self, item_id: uuid.UUID, **fields: Any) -> None:
+        """Update specific fields on one row.
+
+        A Core UPDATE bypasses the ORM, so the in-memory copy of the row is
+        stale afterwards. This used to reconcile that with
+        ``session.expire_all()``, which invalidated every instance in the
+        session rather than the one row being written. On an async session
+        reading an expired attribute raises MissingGreenlet instead of
+        lazy-loading, so callers crashed on objects this update never touched -
+        committing a progress claim died on the contract it had loaded three
+        statements earlier.
+
+        The values that were just written are copied onto the instance as its
+        loaded state instead: the database now holds exactly these values, so
+        recording them is truthful and leaves nothing expired. SQL expressions
+        are skipped, since only the database knows their result; those
+        attributes are expired individually and re-read on next access.
+        """
+        await self.session.execute(update(self.model).where(self.model.id == item_id).values(**fields))
+        await self.session.flush()
+        instance = self.session.identity_map.get(identity_key(self.model, item_id))
+        if instance is None:
+            return
+        computed = [name for name, value in fields.items() if isinstance(value, ClauseElement)]
+        for name, value in fields.items():
+            if name not in computed:
+                set_committed_value(instance, name, value)
+        if computed:
+            self.session.expire(instance, computed)
+
+    async def delete(self, item_id: uuid.UUID) -> None:
+        obj = await self.get_by_id(item_id)
+        if obj is not None:
+            await self.session.delete(obj)
+            await self.session.flush()
+
+
+class ContractRepository(_CRUDBase):
+    model = Contract
+
+    async def list_for_project(
+        self,
+        project_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        status: str | None = None,
+        counterparty_type: str | None = None,
+        contract_type: str | None = None,
+    ) -> tuple[list[Contract], int]:
+        stmt = select(Contract).where(Contract.project_id == project_id)
+        if status is not None:
+            stmt = stmt.where(Contract.status == status)
+        if counterparty_type is not None:
+            stmt = stmt.where(Contract.counterparty_type == counterparty_type)
+        if contract_type is not None:
+            stmt = stmt.where(Contract.contract_type == contract_type)
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        items = (
+            (await self.session.execute(stmt.order_by(Contract.created_at.desc()).offset(offset).limit(limit)))
+            .scalars()
+            .all()
+        )
+        return list(items), total
+
+    async def list_active_for_counterparty(
+        self,
+        counterparty_id: uuid.UUID,
+    ) -> list[Contract]:
+        stmt = select(Contract).where(
+            Contract.counterparty_id == counterparty_id,
+            Contract.status == "active",
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_code(self, code: str) -> Contract | None:
+        result = await self.session.execute(select(Contract).where(Contract.code == code).limit(1))
+        return result.scalar_one_or_none()
+
+
+class ContractLineRepository(_CRUDBase):
+    model = ContractLine
+
+    async def list_for_contract(self, contract_id: uuid.UUID) -> list[ContractLine]:
+        stmt = (
+            select(ContractLine)
+            .where(ContractLine.contract_id == contract_id)
+            .order_by(ContractLine.order_index, ContractLine.code)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def bulk_create(self, lines: list[ContractLine]) -> list[ContractLine]:
+        for line in lines:
+            self.session.add(line)
+        await self.session.flush()
+        return lines
+
+
+class ContractTypeConfigurationRepository(_CRUDBase):
+    model = ContractTypeConfiguration
+
+    async def list_all(self) -> list[ContractTypeConfiguration]:
+        result = await self.session.execute(
+            select(ContractTypeConfiguration).order_by(
+                ContractTypeConfiguration.contract_type,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_by_type(
+        self,
+        contract_type: str,
+    ) -> ContractTypeConfiguration | None:
+        result = await self.session.execute(
+            select(ContractTypeConfiguration)
+            .where(
+                ContractTypeConfiguration.contract_type == contract_type,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+class RetentionScheduleRepository(_CRUDBase):
+    model = RetentionSchedule
+
+    async def list_for_contract(
+        self,
+        contract_id: uuid.UUID,
+    ) -> list[RetentionSchedule]:
+        result = await self.session.execute(
+            select(RetentionSchedule).where(
+                RetentionSchedule.contract_id == contract_id,
+            )
+        )
+        return list(result.scalars().all())
+
+
+class FeeStructureRepository(_CRUDBase):
+    model = FeeStructure
+
+    async def get_for_contract(self, contract_id: uuid.UUID) -> FeeStructure | None:
+        result = await self.session.execute(
+            select(FeeStructure)
+            .where(
+                FeeStructure.contract_id == contract_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+class GainshareConfigurationRepository(_CRUDBase):
+    model = GainshareConfiguration
+
+    async def get_for_contract(
+        self,
+        contract_id: uuid.UUID,
+    ) -> GainshareConfiguration | None:
+        result = await self.session.execute(
+            select(GainshareConfiguration)
+            .where(
+                GainshareConfiguration.contract_id == contract_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+class LDClauseRepository(_CRUDBase):
+    model = LDClause
+
+    async def list_for_contract(self, contract_id: uuid.UUID) -> list[LDClause]:
+        result = await self.session.execute(select(LDClause).where(LDClause.contract_id == contract_id))
+        return list(result.scalars().all())
+
+
+class ProgressClaimRepository(_CRUDBase):
+    model = ProgressClaim
+
+    async def claims_for_contract(
+        self,
+        contract_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        status: str | None = None,
+    ) -> tuple[list[ProgressClaim], int]:
+        stmt = select(ProgressClaim).where(ProgressClaim.contract_id == contract_id)
+        if status is not None:
+            stmt = stmt.where(ProgressClaim.status == status)
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        items = (
+            (await self.session.execute(stmt.order_by(ProgressClaim.created_at.desc()).offset(offset).limit(limit)))
+            .scalars()
+            .all()
+        )
+        return list(items), total
+
+    async def next_claim_number(self, contract_id: uuid.UUID) -> str:
+        result = await self.session.execute(
+            select(func.count()).select_from(ProgressClaim).where(ProgressClaim.contract_id == contract_id)
+        )
+        count = result.scalar_one()
+        return f"PC-{count + 1:04d}"
+
+    async def unpaid_claims_total(self, contract_id: uuid.UUID) -> Decimal:
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(ProgressClaim.net_due), 0)).where(
+                ProgressClaim.contract_id == contract_id,
+                ProgressClaim.status.in_(("submitted", "approved", "certified")),
+            )
+        )
+        value = result.scalar_one()
+        return Decimal(str(value or 0))
+
+    async def paid_total(self, contract_id: uuid.UUID) -> Decimal:
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(ProgressClaim.net_due), 0)).where(
+                ProgressClaim.contract_id == contract_id,
+                ProgressClaim.status == "paid",
+            )
+        )
+        value = result.scalar_one()
+        return Decimal(str(value or 0))
+
+    async def outstanding_retention(self, contract_id: uuid.UUID) -> Decimal:
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(ProgressClaim.retention_amount), 0)).where(
+                ProgressClaim.contract_id == contract_id,
+                ProgressClaim.status.in_(("approved", "certified", "paid")),
+            )
+        )
+        value = result.scalar_one()
+        return Decimal(str(value or 0))
+
+
+class ProgressClaimLineRepository(_CRUDBase):
+    model = ProgressClaimLine
+
+    async def list_for_claim(
+        self,
+        claim_id: uuid.UUID,
+    ) -> list[ProgressClaimLine]:
+        result = await self.session.execute(
+            select(ProgressClaimLine).where(
+                ProgressClaimLine.progress_claim_id == claim_id,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def bulk_create(
+        self,
+        lines: list[ProgressClaimLine],
+    ) -> list[ProgressClaimLine]:
+        for line in lines:
+            self.session.add(line)
+        await self.session.flush()
+        return lines
+
+    async def delete_for_claim(self, claim_id: uuid.UUID) -> int:
+        """Delete every claim line belonging to ``claim_id``.
+
+        Returns the number of rows removed. Used by the Gap I progress bridge
+        when committing a freshly-populated set of lines: the existing draft
+        lines are wiped in one statement (instead of an N+1 per-row delete)
+        before the new breakdown is inserted, so re-running the populate +
+        commit is idempotent and never accumulates stale duplicate lines.
+        """
+        stmt = sa_delete(ProgressClaimLine).where(
+            ProgressClaimLine.progress_claim_id == claim_id,
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return int(result.rowcount or 0)
+
+    async def prior_period_value_by_line(
+        self,
+        contract_id: uuid.UUID,
+        *,
+        exclude_claim_id: uuid.UUID | None = None,
+    ) -> dict[uuid.UUID, Decimal]:
+        """Sum of ``period_completed_value`` per contract line across prior claims.
+
+        Used to maintain the running ``cumulative_completed_value`` on each new
+        claim line: the cumulative for a line is every recognised period value
+        billed against it so far (this contract's non-rejected claims) plus the
+        current period. Rejected claims are excluded because they were never
+        recognised as work-in-place; the claim currently being (re)generated is
+        excluded via ``exclude_claim_id`` so a re-run does not double-count its
+        own previous lines. Returns ``{contract_line_id: Decimal}``.
+        """
+        stmt = (
+            select(
+                ProgressClaimLine.contract_line_id,
+                func.coalesce(func.sum(ProgressClaimLine.period_completed_value), 0),
+            )
+            .join(
+                ProgressClaim,
+                ProgressClaim.id == ProgressClaimLine.progress_claim_id,
+            )
+            .where(
+                ProgressClaim.contract_id == contract_id,
+                ProgressClaim.status != "rejected",
+            )
+            .group_by(ProgressClaimLine.contract_line_id)
+        )
+        if exclude_claim_id is not None:
+            stmt = stmt.where(ProgressClaimLine.progress_claim_id != exclude_claim_id)
+        result = await self.session.execute(stmt)
+        return {row[0]: Decimal(str(row[1] or 0)) for row in result.all()}
+
+    async def lines_with_status_for_contract(
+        self,
+        contract_id: uuid.UUID,
+    ) -> list[tuple[ProgressClaimLine, str]]:
+        """All claim lines for a contract + their parent claim status.
+
+        Single JOIN query - replaces an N+1 (one claim-line query per
+        progress claim) in the SoV-status rollup.
+        """
+        stmt = (
+            select(ProgressClaimLine, ProgressClaim.status)
+            .join(
+                ProgressClaim,
+                ProgressClaim.id == ProgressClaimLine.progress_claim_id,
+            )
+            .where(ProgressClaim.contract_id == contract_id)
+        )
+        result = await self.session.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
+
+
+class FinalAccountRepository(_CRUDBase):
+    model = FinalAccount
+
+    async def get_for_contract(self, contract_id: uuid.UUID) -> FinalAccount | None:
+        result = await self.session.execute(
+            select(FinalAccount)
+            .where(
+                FinalAccount.contract_id == contract_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+class ContractPartyRepository(_CRUDBase):
+    model = ContractParty
+
+    async def list_for_contract(self, contract_id: uuid.UUID) -> list[ContractParty]:
+        stmt = (
+            select(ContractParty)
+            .where(ContractParty.contract_id == contract_id)
+            .order_by(ContractParty.is_primary.desc(), ContractParty.party_role)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+
+class ContractSecurityRepository(_CRUDBase):
+    model = ContractSecurity
+
+    async def list_for_contract(
+        self,
+        contract_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        security_type: str | None = None,
+    ) -> list[ContractSecurity]:
+        stmt = select(ContractSecurity).where(ContractSecurity.contract_id == contract_id)
+        if status is not None:
+            stmt = stmt.where(ContractSecurity.status == status)
+        if security_type is not None:
+            stmt = stmt.where(ContractSecurity.security_type == security_type)
+        result = await self.session.execute(stmt.order_by(ContractSecurity.created_at.desc()))
+        return list(result.scalars().all())
+
+    async def has_active_of_type(self, contract_id: uuid.UUID, security_type: str) -> bool:
+        """True when an active security of the given type exists on the contract."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(ContractSecurity)
+            .where(
+                ContractSecurity.contract_id == contract_id,
+                ContractSecurity.security_type == security_type,
+                ContractSecurity.status == "active",
+            )
+        )
+        return int(result.scalar_one() or 0) > 0
+
+
+class EOTClaimRepository(_CRUDBase):
+    model = EOTClaim
+
+    async def list_for_contract(
+        self,
+        contract_id: uuid.UUID,
+        *,
+        status: str | None = None,
+    ) -> list[EOTClaim]:
+        stmt = select(EOTClaim).where(EOTClaim.contract_id == contract_id)
+        if status is not None:
+            stmt = stmt.where(EOTClaim.status == status)
+        result = await self.session.execute(stmt.order_by(EOTClaim.created_at.desc()))
+        return list(result.scalars().all())
+
+    async def next_eot_number(self, contract_id: uuid.UUID) -> str:
+        result = await self.session.execute(
+            select(func.count()).select_from(EOTClaim).where(EOTClaim.contract_id == contract_id)
+        )
+        count = result.scalar_one()
+        return f"EOT-{count + 1:04d}"
+
+    async def total_days_granted(self, contract_id: uuid.UUID) -> int:
+        """Sum of granted days across decided EOT claims on the contract."""
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(EOTClaim.days_granted), 0)).where(
+                EOTClaim.contract_id == contract_id,
+                EOTClaim.status.in_(("granted", "partially_granted")),
+            )
+        )
+        return int(result.scalar_one() or 0)
+
+
+class ContractDocumentRepository(_CRUDBase):
+    model = ContractDocument
+
+    async def list_for_contract(
+        self,
+        contract_id: uuid.UUID,
+        *,
+        doc_role: str | None = None,
+    ) -> list[ContractDocument]:
+        stmt = select(ContractDocument).where(ContractDocument.contract_id == contract_id)
+        if doc_role is not None:
+            stmt = stmt.where(ContractDocument.doc_role == doc_role)
+        result = await self.session.execute(stmt.order_by(ContractDocument.created_at.desc()))
+        return list(result.scalars().all())
+
+
+class ContractMilestoneRepository(_CRUDBase):
+    model = ContractMilestone
+
+    async def list_for_contract(self, contract_id: uuid.UUID) -> list[ContractMilestone]:
+        stmt = (
+            select(ContractMilestone)
+            .where(ContractMilestone.contract_id == contract_id)
+            .order_by(ContractMilestone.planned_date, ContractMilestone.code)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+
+class ContractTemplateClauseRepository(_CRUDBase):
+    model = ContractTemplateClause
+
+    async def list_for_template(self, template_id: uuid.UUID) -> list[ContractTemplateClause]:
+        stmt = (
+            select(ContractTemplateClause)
+            .where(ContractTemplateClause.template_id == template_id)
+            .order_by(ContractTemplateClause.sort_order, ContractTemplateClause.number)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete_for_template(self, template_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            sa_delete(ContractTemplateClause).where(ContractTemplateClause.template_id == template_id)
+        )
+        return int(result.rowcount or 0)
+
+
+class ContractTemplateRepository(_CRUDBase):
+    """Authored clause templates, and the one place they are unioned with the built-ins.
+
+    Nothing else in the codebase may compose the two halves. The built-in
+    catalogue is a module constant that cannot be edited or versioned; this
+    table holds what a tenant authored. Keeping the union here means the shape
+    a caller sees is decided once, and the invariant that no code appears twice
+    is testable rather than a convention.
+    """
+
+    model = ContractTemplate
+
+    async def get_version(self, code: str, version: int) -> ContractTemplate | None:
+        result = await self.session.execute(
+            select(ContractTemplate).where(ContractTemplate.code == code, ContractTemplate.version == version).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_versions(self, code: str) -> list[ContractTemplate]:
+        result = await self.session.execute(
+            select(ContractTemplate).where(ContractTemplate.code == code).order_by(ContractTemplate.version)
+        )
+        return list(result.scalars().all())
+
+    async def max_version(self, code: str) -> int:
+        """Highest version number under ``code``, or 0 when the code is unused."""
+        result = await self.session.execute(
+            select(func.max(ContractTemplate.version)).where(ContractTemplate.code == code)
+        )
+        return int(result.scalar() or 0)
+
+    async def current_version(self, code: str) -> ContractTemplate | None:
+        """The version a caller means when it names a code and no number.
+
+        The latest published version, or the latest draft when the template has
+        never been published. An archived version is never current: archiving is
+        how a tenant retires paper it no longer signs, and resolving to it would
+        make the retirement invisible.
+        """
+        published = await self.session.execute(
+            select(ContractTemplate)
+            .where(ContractTemplate.code == code, ContractTemplate.status == "published")
+            .order_by(ContractTemplate.version.desc())
+            .limit(1)
+        )
+        row = published.scalar_one_or_none()
+        if row is not None:
+            return row
+        draft = await self.session.execute(
+            select(ContractTemplate)
+            .where(ContractTemplate.code == code, ContractTemplate.status == "draft")
+            .order_by(ContractTemplate.version.desc())
+            .limit(1)
+        )
+        return draft.scalar_one_or_none()
+
+    async def list_current(self) -> list[ContractTemplate]:
+        """One row per authored lineage: its current version, as defined above.
+
+        Written as a Python fold over one ordered SELECT rather than a window
+        function, because the authored catalogue is tenant-sized (tens of rows,
+        not thousands) and a correlated subquery here would have to be written
+        twice for the published-else-draft rule.
+        """
+        result = await self.session.execute(
+            select(ContractTemplate).order_by(ContractTemplate.code, ContractTemplate.version)
+        )
+        best: dict[str, ContractTemplate] = {}
+        for row in result.scalars().all():
+            if row.status == "archived":
+                continue
+            held = best.get(row.code)
+            if held is None:
+                best[row.code] = row
+                continue
+            # Published outranks draft regardless of number, so publishing v2
+            # stays current while v3 is still being drafted. Within one status
+            # the higher version wins, and the ORDER BY already delivers those
+            # in ascending order.
+            if held.status == "published" and row.status != "published":
+                continue
+            best[row.code] = row
+        return [best[code] for code in sorted(best)]
+
+    async def list_all(self) -> list[dict[str, Any]]:
+        """Every template a user may choose from: built-in first, then authored.
+
+        This is the union point named in the class docstring. Every entry has
+        the same keys whichever half it came from, and two of them say which
+        half that was:
+
+            source    "builtin" | "authored"
+            editable  False for a built-in, True for an authored draft
+
+        A built-in reports ``version`` 0 rather than null, so a caller never has
+        to branch on the type of the field to sort or compare it. Zero reads as
+        "not a versioned template", which is exactly what a constant is.
+        """
+        from app.modules.contracts.service import list_contract_templates
+
+        entries: list[dict[str, Any]] = []
+        for builtin in list_contract_templates():
+            entries.append(
+                {
+                    "code": builtin["code"],
+                    "name": builtin["name"],
+                    "family": builtin["family"],
+                    "description": "",
+                    "retention_release_event": builtin["retention_release_event"],
+                    "clause_count": builtin["clause_count"],
+                    "source": "builtin",
+                    "editable": False,
+                    "version": 0,
+                    "status": "published",
+                    "derived_from_builtin": None,
+                    "template_id": None,
+                }
+            )
+
+        rows = await self.list_current()
+        if rows:
+            counts = await self.session.execute(
+                select(
+                    ContractTemplateClause.template_id,
+                    func.count(ContractTemplateClause.id),
+                )
+                .where(ContractTemplateClause.template_id.in_([row.id for row in rows]))
+                .group_by(ContractTemplateClause.template_id)
+            )
+            clause_counts = {template_id: count for template_id, count in counts.all()}
+        else:
+            clause_counts = {}
+
+        for row in rows:
+            entries.append(
+                {
+                    "code": row.code,
+                    "name": row.name,
+                    "family": row.family,
+                    "description": row.description,
+                    "retention_release_event": row.retention_release_event,
+                    "clause_count": int(clause_counts.get(row.id, 0)),
+                    "source": "authored",
+                    "editable": row.status == "draft",
+                    "version": row.version,
+                    "status": row.status,
+                    "derived_from_builtin": row.derived_from_builtin,
+                    "template_id": str(row.id),
+                }
+            )
+        return entries
