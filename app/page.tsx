@@ -1,19 +1,21 @@
 import Link from 'next/link';
-import { getProjects, getTasks, getMilestones } from '@/lib/data-server';
+import { getProjects, getTasks } from '@/lib/data-server';
 import {
   todayISO,
-  programmeReadiness,
-  departmentReadiness,
+  dayDiff,
   lookAhead,
   unscheduledByDepartment,
-  portfolioReadiness,
   isOpen,
 } from '@/lib/readiness';
 import { partitionByKind } from '@/lib/task-kind';
-import { projectStatusBadge } from '@/lib/ui';
-import ReadinessSummary from '@/components/readiness/ReadinessSummary';
-import DepartmentLedger from '@/components/readiness/DepartmentLedger';
-import PortfolioLedger from '@/components/readiness/PortfolioLedger';
+import {
+  MODULE_ORDER,
+  projectModules,
+  portfolioModules,
+  effectiveProgress,
+} from '@/lib/modules';
+import ModuleCard from '@/components/modules/ModuleCard';
+import ProjectModuleGrid from '@/components/modules/ProjectModuleGrid';
 import {
   LookAheadList,
   UnscheduledQueue,
@@ -23,191 +25,180 @@ import {
 export const dynamic = 'force-dynamic';
 
 /**
- * Opening readiness — the programme's first screen.
+ * Programme progress — the home screen agreed at the 2026-09-04 review.
  *
- * The previous dashboard was a portfolio overview: six KPI cards, four money
- * cards, an S-curve, a project-by-status bar chart and five phase bars. Against
- * this dataset that produced "Schedule Health 100%" beside "Avg Progress 6%",
- * four cards reading 0 (budget is null, cost_entries is empty), a flat S-curve
- * (planned_start is null on every row) and three phase bars pinned at 0%
- * forever — the taxonomy was residential development, while the programme's
- * axis is its operating departments.
+ * Three questions, in the order they were asked: how are the projects doing,
+ * how is each of the six modules doing inside them, and what is pending.
  *
- * What a pre-opening PM needs is: how much of "ready to open" is signed off,
- * which department will stop us, and who to call. In that order.
+ * It restores the per-project bucket bars of the original homepage. What it
+ * does not restore is that page's habit of showing a number where there was no
+ * data: five of the six modules currently have no records, and this page says
+ * so rather than drawing them at 0% beside modules genuinely stuck at 0%.
+ *
+ * Percentages here count work items only. The 323 opening gates are an
+ * acceptance checklist, not a workload, and blending the two is what made the
+ * old dashboard report 6% — see lib/task-kind.ts. Gates keep their own
+ * met/total ratio, which is the number that matters at T-27.
  */
 
-function PortfolioStat({
-  label,
-  value,
-  tone = 'neutral',
-  hint,
-}: {
+const LOOK_AHEAD_DAYS = 14;
+const OPENING_SOON_DAYS = 60;
+
+interface StatProps {
   label: string;
   value: string | number;
-  tone?: 'neutral' | 'critical';
   hint?: string;
-}) {
+  tone?: 'neutral' | 'warning' | 'critical';
+}
+
+function Stat({ label, value, hint, tone = 'neutral' }: StatProps) {
+  const emphasised = Number(value) > 0;
+  const colour =
+    tone === 'critical' && emphasised
+      ? 'text-red-600'
+      : tone === 'warning' && emphasised
+        ? 'text-amber-700'
+        : 'text-slate-900';
+
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm">
+    <div className="bg-white rounded-xl p-4 shadow-sm ring-1 ring-slate-900/5">
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div
-        className={`text-2xl font-bold tabular-nums mt-1 ${
-          tone === 'critical' && Number(value) > 0 ? 'text-red-600' : 'text-slate-900'
-        }`}
-      >
-        {value}
-      </div>
+      <div className={`text-2xl md:text-3xl font-bold tabular-nums mt-1 ${colour}`}>{value}</div>
       {hint && <div className="text-xs text-slate-500 mt-1">{hint}</div>}
     </div>
   );
 }
 
-/** The date the programme is working towards. */
-function resolveOpeningDate(
-  projects: { target_end: string | null; status: string }[],
-  milestones: { due_date: string | null; type: string | null }[],
-): string | null {
-  const targets = projects
-    .filter((p) => p.status !== 'Complete')
-    .map((p) => p.target_end)
-    .filter((d): d is string => !!d)
-    .sort();
-  if (targets.length > 0) return targets[0];
-
-  const opening = milestones
-    .filter((m) => m.type === 'Opening' && !!m.due_date)
-    .map((m) => m.due_date as string)
-    .sort();
-  return opening[0] ?? null;
-}
-
-export default async function OpeningReadinessPage() {
-  const [projects, tasks, milestones] = await Promise.all([
-    getProjects(),
-    getTasks(),
-    getMilestones(),
-  ]);
-
+export default async function ProgrammeProgressPage() {
+  const [projects, tasks] = await Promise.all([getProjects(), getTasks()]);
   const today = todayISO();
 
-  /**
-   * With more than one programme, readiness has to stop at the project
-   * boundary. Each project opens on its own date, so a single "5 / 323 gates"
-   * would add up unrelated estates, and one department ledger would fold every
-   * project's "Engineering" into a single row. The portfolio view ranks
-   * projects by risk; the department detail lives on each project's page.
-   */
-  if (projects.length > 1) {
-    const portfolio = portfolioReadiness(projects, tasks, today);
-    const atRisk = portfolio.filter(
-      (p) => p.risk === 'not-mobilised' || p.risk === 'nothing-moved',
-    ).length;
-    const opening60 = portfolio.filter(
-      (p) => p.daysToOpening != null && p.daysToOpening >= 0 && p.daysToOpening <= 60,
-    ).length;
-
-    return (
-      <div className="space-y-5 md:space-y-6">
-        <header>
-          <h1 className="text-xl md:text-2xl font-bold">Opening Readiness</h1>
-          <p className="text-sm text-slate-500">
-            Mức độ sẵn sàng khai trương · {projects.length} programmes · {tasks.length} records
-          </p>
-        </header>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <PortfolioStat label="Programmes" value={projects.length} />
-          <PortfolioStat
-            label="At risk"
-            value={atRisk}
-            tone={atRisk > 0 ? 'critical' : 'neutral'}
-            hint="unmobilised or stalled"
-          />
-          <PortfolioStat label="Opening in 60 days" value={opening60} hint="sắp khai trương" />
-          <PortfolioStat
-            label="Work overdue"
-            value={portfolio.reduce((s, p) => s + p.workOverdue, 0)}
-            tone="critical"
-            hint={`of ${portfolio.reduce((s, p) => s + p.workOpen, 0)} open`}
-          />
-        </div>
-
-        <PortfolioLedger rows={portfolio} />
-      </div>
-    );
+  const byProject = new Map<string, typeof tasks>();
+  for (const task of tasks) {
+    if (!task.project_id) continue;
+    const bucket = byProject.get(task.project_id);
+    if (bucket) bucket.push(task);
+    else byProject.set(task.project_id, [task]);
   }
 
-  const openingDate = resolveOpeningDate(projects, milestones);
-  const programme = programmeReadiness(tasks, today, openingDate);
-  const departments = departmentReadiness(tasks, today);
+  const portfolio = portfolioModules(projects, tasks, today);
+  const rows = projects.map((project) => {
+    const own = byProject.get(project.id) ?? [];
+    return {
+      project,
+      modules: projectModules(project, own, today),
+      overallPct: effectiveProgress(project, own),
+      daysToTarget: project.target_end ? dayDiff(today, project.target_end) : null,
+    };
+  });
+
+  // Worst first: late projects, then the nearest target, then undated ones.
+  const ordered = [...rows].sort((a, b) => {
+    const da = a.daysToTarget ?? Number.POSITIVE_INFINITY;
+    const db = b.daysToTarget ?? Number.POSITIVE_INFINITY;
+    if (da !== db) return da - db;
+    return a.project.name.localeCompare(b.project.name);
+  });
+
+  const pending = portfolio.reduce((sum, m) => sum + m.pending, 0);
+  const overdue = portfolio.reduce((sum, m) => sum + m.overdue, 0);
+  const gatesTotal = portfolio.reduce((sum, m) => sum + m.gatesTotal, 0);
+  const gatesMet = portfolio.reduce((sum, m) => sum + m.gatesMet, 0);
+  const liveModules = portfolio.filter((m) => m.total > 0).length;
+  const openingSoon = rows.filter(
+    (r) => r.daysToTarget != null && r.daysToTarget >= 0 && r.daysToTarget <= OPENING_SOON_DAYS,
+  ).length;
+
   const { work } = partitionByKind(tasks);
-  const upcoming = lookAhead(work, today, 14);
+  const upcoming = lookAhead(work, today, LOOK_AHEAD_DAYS);
   const unscheduled = unscheduledByDepartment(tasks);
   const blockers = tasks.filter((t) => isOpen(t) && !!t.constraint_note);
-
-  const programmeName = projects.length === 1 ? projects[0].name : 'Portfolio';
 
   return (
     <div className="space-y-5 md:space-y-6">
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-xl md:text-2xl font-bold">Opening Readiness</h1>
+          <h1 className="text-xl md:text-2xl font-bold">Programme Progress</h1>
           <p className="text-sm text-slate-500">
-            Mức độ sẵn sàng khai trương · {programme.departmentCount} departments · {tasks.length}{' '}
-            records
+            Tiến độ chương trình · {projects.length}{' '}
+            {projects.length === 1 ? 'project' : 'projects'} · {MODULE_ORDER.length} modules ·{' '}
+            {tasks.length} records
           </p>
         </div>
-        {projects.length === 1 && (
-          <Link
-            href={`/projects/${projects[0].id}`}
-            className="text-sm text-blue-600 hover:underline shrink-0"
-          >
-            Project detail →
-          </Link>
-        )}
+        <Link href="/projects" className="text-sm text-blue-600 hover:underline shrink-0">
+          All projects →
+        </Link>
       </header>
 
-      <ReadinessSummary programme={programme} projectName={programmeName} />
-
-      <DepartmentLedger rows={departments} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <LookAheadList tasks={upcoming} today={today} horizonDays={14} />
-        <UnscheduledQueue groups={unscheduled} />
-        <BlockerList tasks={blockers} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <Stat
+          label="Projects"
+          value={projects.length}
+          hint={`${openingSoon} within ${OPENING_SOON_DAYS} days`}
+        />
+        <Stat
+          label="Opening gates"
+          value={gatesTotal === 0 ? '—' : `${gatesMet} / ${gatesTotal}`}
+          hint="signed off · đã ký duyệt"
+        />
+        <Stat label="Pending" value={pending} tone="warning" hint="open work across all modules" />
+        <Stat label="Overdue" value={overdue} tone="critical" hint="open work past its date" />
       </div>
 
-      {/* Only meaningful with more than one programme in the workspace. */}
-      {projects.length > 1 && (
-        <section className="bg-white rounded-xl shadow-sm">
-          <header className="px-4 py-3 border-b border-slate-100 flex items-baseline justify-between">
-            <h2 className="text-base font-semibold">Projects</h2>
-            <Link href="/projects" className="text-sm text-blue-600 hover:underline">
-              View all →
-            </Link>
-          </header>
-          <ul className="divide-y divide-slate-100">
-            {projects.map((p) => (
-              <li key={p.id}>
-                <Link
-                  href={`/projects/${p.id}`}
-                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"
-                >
-                  <span className="text-sm font-medium truncate">{p.name}</span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${projectStatusBadge(
-                      p.status,
-                    )}`}
-                  >
-                    {p.status}
-                  </span>
-                </Link>
-              </li>
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-base font-semibold">Progress by module</h2>
+            <p className="text-xs text-slate-500">
+              Tiến độ theo hạng mục · {liveModules} of {MODULE_ORDER.length} teams have loaded
+              records
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+          {portfolio.map((row) => (
+            <ModuleCard key={row.module} row={row} />
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Projects by module</h2>
+          <p className="text-xs text-slate-500">
+            Tiến độ từng dự án theo hạng mục · nearest target date first
+          </p>
+        </div>
+        {ordered.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 shadow-sm text-center text-sm text-slate-500">
+            No projects yet.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {ordered.map((row) => (
+              <ProjectModuleGrid
+                key={row.project.id}
+                project={row.project}
+                modules={row.modules}
+                overallPct={row.overallPct}
+                daysToTarget={row.daysToTarget}
+              />
             ))}
-          </ul>
-        </section>
-      )}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Pending attention</h2>
+          <p className="text-xs text-slate-500">Cần xử lý · what is due, undated or blocked</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <LookAheadList tasks={upcoming} today={today} horizonDays={LOOK_AHEAD_DAYS} />
+          <UnscheduledQueue groups={unscheduled} />
+          <BlockerList tasks={blockers} />
+        </div>
+      </section>
     </div>
   );
 }

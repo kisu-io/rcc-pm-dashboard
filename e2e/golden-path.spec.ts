@@ -7,15 +7,39 @@ import { test, expect } from '@playwright/test';
  * Tests the UI rendering layer without needing a real backend or auth.
  */
 
-test('home loads the opening-readiness screen', async ({ page }) => {
+test('home reports progress by the six delivery modules', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('h1').first()).toContainText(/opening readiness/i);
-  // The headline is gate completion, not a blended progress percentage.
-  await expect(page.getByText(/opening gates signed off|no readiness gates/i)).toBeVisible({
+  await expect(page.locator('h1').first()).toContainText(/programme progress/i);
+  await expect(page.getByRole('heading', { name: /progress by module/i })).toBeVisible({
     timeout: 15_000,
   });
-  // The department ledger replaces the old KPI strip and S-curve.
-  await expect(page.getByText(/departments not clear to open/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /projects by module/i })).toBeVisible();
+  // Gate completion stays on the entry screen; it is the load-bearing number
+  // before opening, and percentages alone would bury it.
+  await expect(page.getByText(/opening gates/i).first()).toBeVisible();
+});
+
+test('a module with no records shows no progress bar', async ({ page }) => {
+  // moduleProgress once took progressPct from the project's pct_<module>
+  // override while stateFor still reported 'no-data', so the card printed "—"
+  // and "no records" above a bar filled to the override. The demo fixture sets
+  // pct_legal 80 / pct_design 95, so this is the exact reproduction.
+  await page.goto('/');
+  const section = page.locator('section').filter({ hasText: 'Projects by module' }).first();
+  await expect(section).toBeVisible({ timeout: 15_000 });
+  for (const bar of await section.locator('[aria-hidden="true"] > div').all()) {
+    const width = await bar.evaluate((el) => (el as HTMLElement).style.width);
+    expect(width).not.toBe('');
+  }
+  // Every tile that says "no records" must sit above an empty bar.
+  const empties = section.locator('div', { hasText: /^no records$/ });
+  for (let i = 0; i < (await empties.count()); i++) {
+    const tile = empties.nth(i).locator('xpath=..');
+    const fill = tile.locator('[aria-hidden="true"] > div').first();
+    if (await fill.count()) {
+      expect(await fill.evaluate((el) => (el as HTMLElement).style.width)).toBe('0%');
+    }
+  }
 });
 
 test('the look-ahead never lists work that is already overdue', async ({ page }) => {
@@ -64,7 +88,7 @@ test('budget page says no budget is set rather than showing zeros', async ({ pag
 test('budget and materials are kept out of the nav while they are empty', async ({ page }) => {
   await page.goto('/');
   const nav = page.locator('aside');
-  await expect(nav.getByRole('link', { name: /opening readiness/i })).toBeVisible({
+  await expect(nav.getByRole('link', { name: /programme progress/i })).toBeVisible({
     timeout: 15_000,
   });
   await expect(nav.getByRole('link', { name: /budget/i })).toHaveCount(0);
@@ -114,7 +138,10 @@ test('project detail loads with milestones', async ({ page }) => {
     page.getByRole('heading', { name: 'Le Meridien Fit-out', level: 1 }),
   ).toBeVisible({ timeout: 15_000 });
   // Per-project readiness, scoped to this project rather than the portfolio.
+  // These two assertions used to live on the home page; the module rewrite
+  // moved the readiness ledger here, and it must not go unasserted.
   await expect(page.getByText(/opening gates signed off|no readiness gates/i)).toBeVisible();
+  await expect(page.getByText(/departments not clear to open/i)).toBeVisible();
   // Milestones section (client component — wait for hydration)
   await expect(page.getByText(/milestones/i).first()).toBeVisible({ timeout: 15_000 });
   // Demo milestone "Design sign-off"

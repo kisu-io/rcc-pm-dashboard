@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, getTasks, getMilestones, getDocuments } from '@/lib/data-server';
 import { formatVND, daysFromNow, isOverdue } from '@/lib/data';
-import { effectiveProgress } from '@/lib/phase';
+import { effectiveProgress } from '@/lib/modules';
 import { projectStatusBadge } from '@/lib/ui';
 import { departmentReadiness, programmeReadiness, todayISO } from '@/lib/readiness';
 import DepartmentLedger from '@/components/readiness/DepartmentLedger';
@@ -175,14 +175,12 @@ export default async function ProjectDetail({ params }: { params: { id: string }
       )}
 
       {/*
-        Was a "7-field Project Summary": budget plus five phase bars
-        (Pháp lý / Thiết kế / Cung ứng / Thi công / Sales) plus an overall
-        percentage. Those five buckets are a residential-development taxonomy,
-        and lib/phase.ts::classifyPhase routes 629 of this programme's 679
-        tasks into "Thi công" while Thiết kế and Sales sit at 0% permanently.
-        The programme's real axis is its operating departments, so that is what
-        this shows — the same ledger as the readiness screen, scoped to this
-        project.
+        Module bars live on the home page, where they can be compared across
+        projects. What this page adds is the level below them: `tasks.module`
+        says which of the six teams owns a row, `tasks.phase` says which
+        department inside that team does — Engineering, Culinary, Housekeeping
+        — and the department is the unit a PM actually chases. So this stays
+        the readiness ledger, scoped to one project.
       */}
       <ReadinessSummary programme={programme} projectName={project.name} />
 

@@ -19,7 +19,7 @@ import type { ModuleAvailability } from '@/lib/data-server';
  * than in the middle of the primary list.
  */
 const nav = [
-  { href: '/', label: 'Opening Readiness', icon: LayoutDashboard },
+  { href: '/', label: 'Programme Progress', icon: LayoutDashboard },
   { href: '/tasks', label: 'Tasks & Gates', icon: ListTodo },
   { href: '/gantt', label: 'Schedule', icon: Calendar },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
