@@ -284,3 +284,69 @@ export function getRetainageReconciliation(options: {
     `/v1/reporting/po-retainage-reconciliation/?${params.toString()}`,
   );
 }
+
+/* ── Project procurement stats ────────────────────────────────────────── */
+
+/**
+ * The six purchase-order states, in FSM order.
+ *
+ * Mirrors `_PO_STATUS_TRANSITIONS` in `procurement/service.py:174`. Pinned as
+ * a union so a `by_status` key the backend stops emitting - or one a caller
+ * invents - fails at the type level rather than silently rendering as zero.
+ *
+ * `partially_received` is the one most consumers forget: a PO sits there for
+ * the whole delivery window, so any bucketing that omits it under-reports
+ * live orders. The dashboard's own `compute_procurement_pipeline`
+ * (`dashboard/service.py:795`) currently drops it.
+ */
+export type POStatus =
+  | 'draft'
+  | 'approved'
+  | 'issued'
+  | 'partially_received'
+  | 'completed'
+  | 'cancelled';
+
+export interface ProcurementStatsResponse {
+  /** Every PO on the project, cancelled ones included. */
+  total_pos: number;
+  /**
+   * PO count keyed by status. Statuses with no rows are ABSENT, not zero -
+   * read with `?? 0` rather than indexing blind.
+   */
+  by_status: Partial<Record<POStatus, number>>;
+  /**
+   * SUM(amount_total) over non-cancelled POs, as a decimal string.
+   *
+   * CURRENCY-BLIND. `stats_for_project` (`procurement/repository.py:159-174`)
+   * sums `amount_total` without ever reading `currency_code`, so on a
+   * multi-currency project this adds euros to dong and the result means
+   * nothing. Render it as money ONLY when the project is single-currency;
+   * otherwise show `total_pos` / `pending_delivery_count` instead, or split
+   * by currency server-side first.
+   */
+  total_committed: string;
+  /** Count of CONFIRMED goods receipts - a receipt count, not a value. */
+  total_received: number;
+  /** POs issued or partially received whose delivery has not completed. */
+  pending_delivery_count: number;
+}
+
+/**
+ * Project-wide procurement aggregates, computed server-side.
+ *
+ * Use this instead of reducing over a fetched PO page. The list endpoint
+ * returns 50 orders by default and caps at 100, so totals derived from it
+ * describe a page, not a project - the limitation `ProcurementPage.tsx:388`
+ * documents and defers to exactly this endpoint.
+ *
+ * Requires the `procurement.read` permission; the backend verifies project
+ * access before aggregating.
+ */
+export function getProcurementStats(
+  projectId: string,
+): Promise<ProcurementStatsResponse> {
+  return apiGet<ProcurementStatsResponse>(
+    `/v1/procurement/stats/?project_id=${encodeURIComponent(projectId)}`,
+  );
+}

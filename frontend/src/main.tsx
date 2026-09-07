@@ -7,6 +7,7 @@ import { useToastStore } from '@/stores/useToastStore';
 import { notifyQueryError } from '@/shared/lib/queryErrorToast';
 import { initialLocaleReady } from './app/i18n';
 import './index.css';
+import './rcc-brand.css'; // RCC CONST brand overrides — must load after index.css
 
 (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = '/cesium/';
 

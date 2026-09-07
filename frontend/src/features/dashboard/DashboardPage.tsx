@@ -50,6 +50,7 @@ import { dashboardGuide } from './dashboardGuide';
 import { pricedPositions, type PositionCounts } from './pricedPositions';
 import { MultiCurrencyTotal } from '@/shared/ui/MultiCurrencyTotal';
 import { WhatsNewCard } from '@/shared/ui/WhatsNewCard';
+import { AllProjectsOverviewCard } from './AllProjectsOverviewCard';
 import { DashboardCasesCard } from './DashboardCasesCard';
 import { CompactProjectCard } from './components/CompactProjectCard';
 import { type ProjectPin } from './components/DashboardProjectsMap';
@@ -138,6 +139,7 @@ const RegionalPackCard = lazy(() =>
  * something (inbox, projects map) instead show a WidgetSkeleton while loading.
  */
 const WIDGET_NULL_FALLBACK = new Set<string>([
+  'all_projects_overview',
   'finance_summary',
   'estimate_resources',
   'bim_coverage',
@@ -2388,6 +2390,7 @@ function DashboardPageInner() {
   }));
 
   const widgetNodes: Record<string, ReactNode> = {
+    all_projects_overview: <AllProjectsOverviewCard />,
     cases_learn: <DashboardCasesCard />,
     continue_work: lastBoq ? (
       <button
