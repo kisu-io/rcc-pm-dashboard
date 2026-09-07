@@ -1,0 +1,68 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   RCC CONST — brand overrides
+   ─────────────────────────────────────────────────────────────────────────
+   Loaded AFTER index.css so these win on cascade order. Kept in a separate
+   file on purpose: index.css is upstream-owned and changes often (5,305
+   commits landed in two months), so editing it in place would conflict on
+   every merge. Everything here is a token redefinition — no component or
+   utility class is touched, because tailwind.config.js maps `oe-blue` to
+   var(--oe-blue) rather than to a literal.
+
+   Palette: gold on white. Gold is split into two roles because metallic
+   gold cannot carry text — #C9A227 is only 2.42:1 on white, far under the
+   WCAG-AA 4.5:1 floor. Large shapes get the brand gold; anything that must
+   be READ gets the deepened gold. Ratios below are computed, not guessed.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Brand gold — fills, borders, active nav, the wordmark. Large shapes
+     only: 2.42:1 on #fff, which is fine for a 3px border or a 32px
+     wordmark and wrong for a 13px label. */
+  --oe-blue: #c9a227;
+  --oe-blue-hover: #d8b33b;
+  --oe-blue-active: #b08d1c;
+
+  /* Deep gold — the "dark" slot. 4.91:1 on #fff, clears AA for normal text. */
+  --oe-blue-dark: #8a6d0b;
+
+  /* Text gold — links and small labels. Deliberately deeper than -dark so it
+     also clears AA on the tinted pill below, not just on white:
+       #7a5f09 → 6.06:1 on #ffffff
+       #7a5f09 → 5.75:1 on #fdf9ec (the -subtle pill) */
+  --oe-blue-text: #7a5f09;
+
+  /* Gold wash — badge/pill backgrounds, selected rows, active nav. This is
+     the token that keeps a white UI from reading as bare white-with-yellow;
+     it supplies the warmth a dark theme would otherwise have carried. */
+  --oe-blue-subtle: #fdf9ec;
+
+  /* Channel triplet for Tailwind alpha modifiers (bg-oe-blue/10, etc.).
+     MUST stay in sync with --oe-blue above — upstream's comment explains
+     that a mismatch silently drops the utility from the build. */
+  --oe-blue-ch: 201 162 39;
+
+  /* Surfaces — warmed a half-step off pure grey so white sits with gold
+     rather than against it. Kept near-white: these are read all day. */
+  --oe-bg: #ffffff;
+  --oe-bg-secondary: #fafaf7;
+  --oe-bg-tertiary: #fdfdfb;
+  --oe-bg-elevated: #ffffff;
+  --oe-bg-secondary-ch: 250 250 247;
+  --oe-bg-tertiary-ch: 253 253 251;
+
+  /* Ink — warm near-black. Pure #000 next to gold reads as a colour clash;
+     this keeps the neutral on the same temperature as the accent. */
+  --oe-text-primary: #1a1712;
+}
+
+/* Dark mode is not part of the RCC scheme and the app defaults to light.
+   These exist only so a manual toggle doesn't drop back to Apple blue.
+   Gold is lightened here because the deep golds vanish on dark surfaces. */
+.dark {
+  --oe-blue: #e5c55c;
+  --oe-blue-hover: #eed588;
+  --oe-blue-active: #d4b23f;
+  --oe-blue-dark: #c9a227;
+  --oe-blue-text: #eed588;
+  --oe-blue-ch: 229 197 92;
+}

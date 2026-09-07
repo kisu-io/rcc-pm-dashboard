@@ -41,6 +41,8 @@ import {
   Package,
   // Learn-by-example cases card, folded into the registry 2026-07-21
   GraduationCap,
+  // Owner / investor portfolio view (2026-09-07)
+  LayoutGrid,
 } from 'lucide-react';
 
 export interface DashboardWidgetMeta {
@@ -57,6 +59,18 @@ export interface DashboardWidgetMeta {
 }
 
 export const DASHBOARD_WIDGETS: readonly DashboardWidgetMeta[] = [
+  // Owner / investor view: every project on one row, then the five delivery
+  // modules. First in the list because it answers "where do I intervene"
+  // before any single-project widget below narrows the question. Reads the
+  // shared cross-project rollup, so it costs no extra request.
+  {
+    id: 'all_projects_overview',
+    labelKey: 'dashboard.layout.w_all_projects',
+    labelDefault: 'All projects overview',
+    descKey: 'dashboard.layout.w_all_projects_desc',
+    descDefault: 'Every project plus the five delivery modules, portfolio-wide',
+    icon: LayoutGrid,
+  },
   // "Start here - learn by example" cases gallery. Folded into the registry so
   // it can be hidden or narrowed like any other widget (it used to be pinned
   // full-width and could not be removed). Defaults to full width at the top.
